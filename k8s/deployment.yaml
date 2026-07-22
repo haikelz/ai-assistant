@@ -1,0 +1,104 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ai-assistant
+  labels:
+    app: ai-assistant
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: ai-assistant
+  template:
+    metadata:
+      labels:
+        app: ai-assistant
+    spec:
+      terminationGracePeriodSeconds: 30
+      volumes:
+        - name: picoclaw-data
+          persistentVolumeClaim:
+            claimName: ai-assistant-data
+      initContainers:
+        - name: initialize-workspace
+          image: haikelilham/ai-assistant
+          imagePullPolicy: Always
+          command: ["/bin/sh", "-ec"]
+          args:
+            - |
+              mkdir -p /root/.picoclaw
+              jq '
+                .channel_list.telegram.allow_from = [env.TELEGRAM_USER_ID]
+                | .model_list |= map(if .model_name == "deepseek-v4-pro" then .api_keys = [env.SUMOPOD_API_KEY] else . end)
+              ' /seed/config.json > /root/.picoclaw/config.json.tmp
+              mv /root/.picoclaw/config.json.tmp /root/.picoclaw/config.json
+              chmod 600 /root/.picoclaw/config.json
+              if [ ! -f /root/.picoclaw/workspace/SOUL.md ]; then cp -R /seed/workspace /root/.picoclaw/workspace; fi
+              printf '%s\n' \
+                'channels:' \
+                '  telegram:' \
+                '    settings:' \
+                "      token: ${TELEGRAM_BOT_TOKEN}" \
+                > /root/.picoclaw/.security.yml
+              chmod 600 /root/.picoclaw/.security.yml
+          envFrom:
+            - secretRef:
+                name: ai-assistant-env
+          volumeMounts:
+            - name: picoclaw-data
+              mountPath: /root/.picoclaw
+        - name: initialize-paycheck-reminder
+          image: haikelilham/ai-assistant
+          imagePullPolicy: Always
+          command: ["/bin/sh", "-ec"]
+          args:
+            - |
+              if ! picoclaw cron list | grep -Fq monthly-paycheck-reminder; then
+                picoclaw cron add --name monthly-paycheck-reminder --cron "0 9 28 * *" --channel telegram --to "$(printenv TELEGRAM_USER_ID)" --message "Today is the 28th in Asia/Jakarta. Ask the user for their payday amount in rupiah. When they give a clear amount, record it as Modal through the finance-ledger skill and confirm the total money."
+              fi
+          env:
+            - name: TZ
+              value: Asia/Jakarta
+          envFrom:
+            - secretRef:
+                name: ai-assistant-env
+          volumeMounts:
+            - name: picoclaw-data
+              mountPath: /root/.picoclaw
+      containers:
+        - name: picoclaw
+          image: haikelilham/ai-assistant
+          imagePullPolicy: Always
+          env:
+            - name: TZ
+              value: Asia/Jakarta
+          envFrom:
+            - secretRef:
+                name: ai-assistant-env
+          ports:
+            - name: http
+              containerPort: 18790
+          readinessProbe:
+            httpGet:
+              path: /ready
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 20
+            periodSeconds: 20
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "256Mi"
+            limits:
+              cpu: "1000m"
+              memory: "1Gi"
+          volumeMounts:
+            - name: picoclaw-data
+              mountPath: /root/.picoclaw

@@ -1,0 +1,14 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: ai-assistant
+  labels:
+    app: ai-assistant
+spec:
+  type: ClusterIP
+  selector:
+    app: ai-assistant
+  ports:
+    - name: http
+      port: 18790
+      targetPort: http
