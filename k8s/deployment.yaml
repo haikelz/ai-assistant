@@ -35,7 +35,11 @@ spec:
               ' /seed/config.json > /root/.picoclaw/config.json.tmp
               mv /root/.picoclaw/config.json.tmp /root/.picoclaw/config.json
               chmod 600 /root/.picoclaw/config.json
-              if [ ! -f /root/.picoclaw/workspace/SOUL.md ]; then cp -R /seed/workspace /root/.picoclaw/workspace; fi
+              if [ ! -d /root/.picoclaw/workspace ]; then
+                cp -R /seed/workspace /root/.picoclaw/workspace
+              else
+                cp /seed/workspace/SOUL.md /root/.picoclaw/workspace/SOUL.md
+              fi
               printf '%s\n' \
                 'channels:' \
                 '  telegram:' \
