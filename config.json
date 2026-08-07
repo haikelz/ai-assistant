@@ -1,0 +1,58 @@
+{
+  "version": 3,
+  "agents": {
+    "defaults": {
+      "workspace": "/root/.picoclaw/workspace",
+      "restrict_to_workspace": true,
+      "model_name": "deepseek-v4-pro",
+      "max_tokens": 8192,
+      "max_tool_iterations": 12,
+      "max_parallel_turns": 1
+    }
+  },
+  "model_list": [
+    {
+      "model_name": "deepseek-v4-pro",
+      "provider": "azure",
+      "model": "deepseek-v4-pro",
+      "api_base": "http://127.0.0.1:8080"
+    }
+  ],
+  "channel_list": {
+    "telegram": {
+      "enabled": true,
+      "type": "telegram",
+      "allow_from": ["${TELEGRAM_USER_ID}"],
+      "settings": {
+        "streaming": {
+          "enabled": true
+        }
+      }
+    }
+  },
+  "tools": {
+    "exec": {
+      "enabled": true,
+      "enable_deny_patterns": true,
+      "allow_remote": true,
+      "timeout_seconds": 20
+    },
+    "cron": {
+      "enabled": true,
+      "allow_command": false,
+      "command_allowed_remotes": []
+    },
+    "skills": {
+      "enabled": true
+    },
+    "message": {
+      "enabled": true,
+      "media_enabled": true
+    }
+  },
+  "gateway": {
+    "host": "0.0.0.0",
+    "port": 18790,
+    "log_level": "info"
+  }
+}

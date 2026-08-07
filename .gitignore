@@ -1,0 +1,53 @@
+.env
+Keuangan per Juli - Desember 2026.xlsx
+.codegraph
+tasks/*
+
+# >>> create-ai-ignore managed
+# Local environment and secrets
+.env
+.env.*
+!.env.example
+!.env.sample
+*credential*
+*credentials*
+*secret*
+*secrets*
+*token*
+*.key
+*.pem
+*.p12
+*.pfx
+
+# Local databases, backups, and sessions
+*.sql
+*.dump
+*.bak
+*.backup
+*.sqlite
+*.sqlite3
+*.db
+*session*
+sessions/
+
+# Local AI/private workdirs
+.claude/
+.cursor/
+.omo/
+AGENTS.md
+CLAUDE.md
+prompts/
+
+# Local dependencies/build/cache/logs
+node_modules/
+vendor/
+dist/
+build/
+coverage/
+.next/
+.nuxt/
+.turbo/
+.cache/
+logs/
+*.log
+# <<< create-ai-ignore managed

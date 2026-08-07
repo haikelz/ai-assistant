@@ -1,0 +1,67 @@
+# >>> create-ai-ignore managed
+# Environment files
+.env
+.env.*
+!.env.example
+!.env.sample
+
+# Credentials, keys, and certificates
+*credential*
+*credentials*
+*secret*
+*secrets*
+*token*
+*.key
+*.pem
+*.p12
+*.pfx
+*.crt
+*.cert
+id_rsa*
+id_ed25519*
+
+# Cloud and local auth config
+.aws/
+.azure/
+.gcp/
+.kube/
+.docker/config.json
+
+# Database dumps and backups
+*.sql
+*.dump
+*.bak
+*.backup
+*.sqlite
+*.sqlite3
+*.db
+
+# Logs, temp, and caches
+*.log
+logs/
+tmp/
+temp/
+.cache/
+cache/
+
+# Dependencies and build outputs
+node_modules/
+vendor/
+dist/
+build/
+coverage/
+.next/
+.nuxt/
+.turbo/
+
+# VCS internals
+.git/
+.svn/
+.hg/
+
+# IDE/editor files
+.idea/
+.vscode/
+*.swp
+*.swo
+# <<< create-ai-ignore managed
