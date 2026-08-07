@@ -3,18 +3,22 @@ kind: Application
 metadata:
   name: ai-assistant
   namespace: argocd
+  finalizers: [resources-finalizer.argocd.argoproj.io]
 spec:
   project: default
   source:
-    repoURL: https://github.com/haikelz/ai-assistant.git
+    repoURL: https://github.com/haikelz/ai-assistant
     targetRevision: master
     path: k8s
   destination:
     server: https://kubernetes.default.svc
-    namespace: default
+    namespace: bots
   syncPolicy:
     automated:
       prune: true
       selfHeal: true
+    retry:
+      limit: 3
+      backoff: {duration: 5s, factor: 2, maxDuration: 1m}
     syncOptions:
       - CreateNamespace=true

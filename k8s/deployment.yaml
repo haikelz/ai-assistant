@@ -23,7 +23,7 @@ spec:
             claimName: ai-assistant-data
       initContainers:
         - name: initialize-workspace
-          image: haikelilham/ai-assistant
+          image: ${IMAGE}
           imagePullPolicy: Always
           command: ["/bin/sh", "-ec"]
           args:
@@ -35,19 +35,10 @@ spec:
               ' /seed/config.json > /root/.picoclaw/config.json.tmp
               mv /root/.picoclaw/config.json.tmp /root/.picoclaw/config.json
               chmod 600 /root/.picoclaw/config.json
-              if [ ! -d /root/.picoclaw/workspace ]; then
-                cp -R /seed/workspace /root/.picoclaw/workspace
-              else
-                cp /seed/workspace/SOUL.md /root/.picoclaw/workspace/SOUL.md
-                mkdir -p /root/.picoclaw/workspace/skills/finance-ledger
-                cp /seed/workspace/skills/finance-ledger/SKILL.md /root/.picoclaw/workspace/skills/finance-ledger/SKILL.md
-              fi
-              printf '%s\n' \
-                'channels:' \
-                '  telegram:' \
-                '    settings:' \
-                "      token: ${TELEGRAM_BOT_TOKEN}" \
-                > /root/.picoclaw/.security.yml
+              if [ ! -f /root/.picoclaw/workspace/SOUL.md ]; then cp -R /seed/workspace /root/.picoclaw/workspace; fi
+              mkdir -p /root/.picoclaw/workspace/skills/job-search
+              cp /seed/workspace/skills/job-search/SKILL.md /root/.picoclaw/workspace/skills/job-search/SKILL.md
+              printf 'channels:\n  telegram:\n    settings:\n      token: "%s"\n' "$(printenv TELEGRAM_BOT_TOKEN)" > /root/.picoclaw/.security.yml
               chmod 600 /root/.picoclaw/.security.yml
           envFrom:
             - secretRef:
@@ -56,7 +47,7 @@ spec:
             - name: picoclaw-data
               mountPath: /root/.picoclaw
         - name: initialize-paycheck-reminder
-          image: haikelilham/ai-assistant
+          image: ${IMAGE}
           imagePullPolicy: Always
           command: ["/bin/sh", "-ec"]
           args:
@@ -67,14 +58,17 @@ spec:
           env:
             - name: TZ
               value: Asia/Jakarta
-          envFrom:
-            - secretRef:
-                name: ai-assistant-env
+            - name: TELEGRAM_USER_ID
+              valueFrom:
+                secretKeyRef:
+                  name: ai-assistant-env
+                  key: TELEGRAM_USER_ID
           volumeMounts:
             - name: picoclaw-data
               mountPath: /root/.picoclaw
+
         - name: initialize-job-alert-cron
-          image: haikelilham/ai-assistant
+          image: ${IMAGE}
           imagePullPolicy: Always
           command: ["/bin/sh", "-ec"]
           args:
@@ -85,22 +79,26 @@ spec:
           env:
             - name: TZ
               value: Asia/Jakarta
-          envFrom:
-            - secretRef:
-                name: ai-assistant-env
+            - name: TELEGRAM_USER_ID
+              valueFrom:
+                secretKeyRef:
+                  name: ai-assistant-env
+                  key: TELEGRAM_USER_ID
           volumeMounts:
             - name: picoclaw-data
               mountPath: /root/.picoclaw
       containers:
         - name: picoclaw
-          image: haikelilham/ai-assistant
+          image: ${IMAGE}
           imagePullPolicy: Always
           env:
             - name: TZ
               value: Asia/Jakarta
-          envFrom:
-            - secretRef:
-                name: ai-assistant-env
+            - name: TELEGRAM_USER_ID
+              valueFrom:
+                secretKeyRef:
+                  name: ai-assistant-env
+                  key: TELEGRAM_USER_ID
           ports:
             - name: http
               containerPort: 18790
