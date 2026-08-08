@@ -72,6 +72,11 @@ spec:
           env:
             - name: TZ
               value: Asia/Jakarta
+            - name: TELEGRAM_BOT_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: ai-assistant-env
+                  key: TELEGRAM_BOT_TOKEN
             - name: TELEGRAM_USER_ID
               valueFrom:
                 secretKeyRef:
