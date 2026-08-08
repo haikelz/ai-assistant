@@ -32,6 +32,8 @@ FROM docker.io/sipeed/picoclaw:v0.3.1
 
 RUN apk add --no-cache curl jq
 
+COPY config.json /seed/config.json
+COPY workspace /seed/workspace
 COPY --from=finance-builder /out/finance-api /usr/local/bin/finance-api
 COPY --from=job-alert-builder /out/job-alert /usr/local/bin/job-alert
 COPY --from=loker-api-builder /out/loker-api /usr/local/bin/loker-api
