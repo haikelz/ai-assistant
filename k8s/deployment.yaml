@@ -66,28 +66,6 @@ spec:
           volumeMounts:
             - name: picoclaw-data
               mountPath: /root/.picoclaw
-
-        - name: initialize-job-alert-cron
-          image: ${IMAGE}
-          imagePullPolicy: Always
-          command: ["/bin/sh", "-ec"]
-          args:
-            - |
-              if ! picoclaw cron list | grep -Fq daily-job-alert; then
-                picoclaw cron add --name daily-job-alert --cron "0 3 * * *" --channel telegram --to "$(printenv TELEGRAM_USER_ID)" --message "Jalankan job-alert sekarang juga untuk mengambil dan mengirim notifikasi lowongan kerja harian. Jangan tanya konfirmasi, langsung eksekusi."
-              fi
-          env:
-            - name: TZ
-              value: Asia/Jakarta
-            - name: TELEGRAM_USER_ID
-              valueFrom:
-                secretKeyRef:
-                  name: ai-assistant-env
-                  key: TELEGRAM_USER_ID
-          volumeMounts:
-            - name: picoclaw-data
-              mountPath: /root/.picoclaw
-      containers:
         - name: picoclaw
           image: ${IMAGE}
           imagePullPolicy: Always
