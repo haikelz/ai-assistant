@@ -11,6 +11,7 @@ import (
 	"regexp"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -77,7 +78,7 @@ func main() {
 	keywordsFlag := flag.String("keywords", "", "comma-separated search keywords (default: built-in list)")
 	locationFlag := flag.String("location", "", "comma-separated target locations (default: built-in list)")
 	skillsFlag := flag.String("skills", "", "comma-separated tech stack for AI filtering (default: built-in list)")
-	experienceFlag := flag.String("experience", "", "max years of experience, e.g. 3 (default: 3)")
+	experienceFlag := flag.String("experience", "", "max years of experience, e.g. 3 or 1-3 (default: 3)")
 	dryRun := flag.Bool("dry-run", false, "print the message to stdout instead of sending to Telegram")
 	flag.Parse()
 
@@ -91,7 +92,7 @@ func main() {
 		techStack = splitAndTrim(*skillsFlag)
 	}
 	if *experienceFlag != "" {
-		fmt.Sscanf(strings.TrimSpace(*experienceFlag), "%d", &maxYearsExp)
+		maxYearsExp = parseMaxYears(*experienceFlag)
 	}
 
 	client := &http.Client{Timeout: requestTimeout}
@@ -107,9 +108,12 @@ func main() {
 	sortJobsByRelevance(glintsFinal)
 	sortJobsByRelevance(jsFinal)
 	glintsFinal = limitJobs(glintsFinal, jobsPerSource)
-	jsFinal = limitJobs(jsFinal, jobsPerSource)
+	greeting := "Selamat pagi! ☀️ Berikut update lowongan kerja terbaru hari ini:"
+	if *keywordsFlag != "" {
+		greeting = "Berikut hasil pencarian lowongan kerja:"
+	}
+	message := formatMessage(greeting, glintsFinal, jsFinal)
 
-	message := formatMessage(glintsFinal, jsFinal)
 	if *dryRun {
 		fmt.Println(message)
 		return
@@ -127,6 +131,17 @@ func splitAndTrim(s string) []string {
 		}
 	}
 	return result
+}
+
+// parseMaxYears extracts the upper bound from an experience flag.
+// Accepts "3" or "1-3"; the last number is the max.
+func parseMaxYears(s string) int {
+	s = strings.TrimSpace(s)
+	parts := strings.Split(s, "-")
+	last := strings.TrimSpace(parts[len(parts)-1])
+	var max int
+	fmt.Sscanf(last, "%d", &max)
+	return max
 }
 
 // --- Glints Fetcher ---
@@ -249,46 +264,57 @@ const glintsSearchQuery = `query searchJobsV3($data: JobSearchConditionInput!) {
 }`
 
 func fetchGlintsJobs(client *http.Client) []Job {
-	var all []Job
-	seen := map[string]bool{}
+	var (
+		mu   sync.Mutex
+		all  []Job
+		seen = map[string]bool{}
+	)
 
+	var wg sync.WaitGroup
 	for _, keyword := range keywords {
-		for page := 1; page <= glintsMaxPages; page++ {
-			vars := map[string]any{
-				"data": map[string]any{
-					"SearchTerm":          keyword,
-					"CountryCode":         "ID",
-					"includeExternalJobs": true,
-					"pageSize":            jobsPerRequest,
-					"page":                page,
-				},
-			}
+		wg.Add(1)
+		go func(kw string) {
+			defer wg.Done()
+			for page := 1; page <= glintsMaxPages; page++ {
+				vars := map[string]any{
+					"data": map[string]any{
+						"SearchTerm":          kw,
+						"CountryCode":         "ID",
+						"includeExternalJobs": true,
+						"pageSize":            jobsPerRequest,
+						"page":                page,
+					},
+				}
 
-			req := glintsGraphQLRequest{
-				OperationName: "searchJobsV3",
-				Variables:     vars,
-				Query:         glintsSearchQuery,
-			}
+				req := glintsGraphQLRequest{
+					OperationName: "searchJobsV3",
+					Variables:     vars,
+					Query:         glintsSearchQuery,
+				}
 
-			body, err := json.Marshal(req)
-			if err != nil {
-				continue
-			}
-
-			jobs, hasMore := doGlintsRequest(client, body)
-			for _, j := range jobs {
-				if seen[j.ID] {
+				body, err := json.Marshal(req)
+				if err != nil {
 					continue
 				}
-				seen[j.ID] = true
-				all = append(all, glintsToJob(j))
-			}
 
-			if !hasMore {
-				break
+				jobs, hasMore := doGlintsRequest(client, body)
+				mu.Lock()
+				for _, j := range jobs {
+					if seen[j.ID] {
+						continue
+					}
+					seen[j.ID] = true
+					all = append(all, glintsToJob(j))
+				}
+				mu.Unlock()
+
+				if !hasMore {
+					break
+				}
 			}
-		}
+		}(keyword)
 	}
+	wg.Wait()
 
 	return all
 }
@@ -408,7 +434,6 @@ func formatGlintsSkills(skills []glintsSkillWrapper) string {
 // Jobstreet (SEEK) serves search results as server-side-rendered HTML.
 // Each job card carries data-automation="normalJob" with structured fields.
 // ponytail: regex on SSR HTML; ceiling = breaks if SEEK changes card markup.
-// Upgrade path: call the candidate GraphQL endpoint (candidate-graphql-dark-pro.cloud.seek.com.au).
 
 var (
 	jobstreetCardRe     = regexp.MustCompile(`data-automation="normalJob"`)
@@ -420,24 +445,35 @@ var (
 )
 
 func fetchJobstreetJobs(client *http.Client) []Job {
-	var all []Job
-	seen := map[string]bool{}
+	var (
+		mu   sync.Mutex
+		all  []Job
+		seen = map[string]bool{}
+	)
 
+	var wg sync.WaitGroup
 	for _, keyword := range keywords {
-		for page := 1; page <= jobstreetMaxPages; page++ {
-			jobs := fetchJobstreetPage(client, keyword, page)
-			if len(jobs) == 0 {
-				break
-			}
-			for _, j := range jobs {
-				if seen[j.URL] {
-					continue
+		wg.Add(1)
+		go func(kw string) {
+			defer wg.Done()
+			for page := 1; page <= jobstreetMaxPages; page++ {
+				jobs := fetchJobstreetPage(client, kw, page)
+				if len(jobs) == 0 {
+					break
 				}
-				seen[j.URL] = true
-				all = append(all, j)
+				mu.Lock()
+				for _, j := range jobs {
+					if seen[j.URL] {
+						continue
+					}
+					seen[j.URL] = true
+					all = append(all, j)
+				}
+				mu.Unlock()
 			}
-		}
+		}(keyword)
 	}
+	wg.Wait()
 
 	return all
 }
@@ -715,11 +751,11 @@ func cleanJSONResponse(s string) string {
 
 // --- Message Formatter ---
 
-func formatMessage(glintsJobs, jobstreetJobs []Job) string {
+func formatMessage(greeting string, glintsJobs, jobstreetJobs []Job) string {
 	var b strings.Builder
 
-	b.WriteString("Selamat pagi! ☀️ Berikut update lowongan kerja terbaru hari ini:\n\n")
-	b.WriteString("Daftar Job Terbaru:\n\n")
+	b.WriteString(greeting)
+	b.WriteString("\n\nDaftar Job Terbaru:\n\n")
 
 	b.WriteString("A. Glints\n\n")
 	if len(glintsJobs) == 0 {
