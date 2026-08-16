@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"os"
 	"regexp"
 	"sort"
@@ -16,15 +17,14 @@ import (
 )
 
 const (
-	glintsGraphqlURL   = "https://glints.com/api/v2-alc/graphql"
-	jobstreetSearchURL = "https://id.jobstreet.com/id/jobs"
-	sumopodURL         = "https://ai.sumopod.com/v1/responses"
-	telegramAPIURL     = "https://api.telegram.org"
-	requestTimeout     = 30 * time.Second
-	jobsPerSource      = 20
-	jobsPerRequest     = 30
-	glintsMaxPages     = 2
-	jobstreetMaxPages  = 2
+	kalibrrURL     = "https://www.kalibrr.com/id-ID/job-board/te/software"
+	kitalulusURL   = "https://kitalulus.com/lowongan"
+	deallsURL      = "https://dealls.com/loker"
+	sumopodURL     = "https://ai.sumopod.com/v1/responses"
+	telegramAPIURL = "https://api.telegram.org"
+	requestTimeout = 30 * time.Second
+	jobsPerSource  = 20
+	maxPages       = 2
 )
 
 var keywords = []string{
@@ -77,7 +77,7 @@ type Job struct {
 func main() {
 	keywordsFlag := flag.String("keywords", "", "comma-separated search keywords (default: built-in list)")
 	locationFlag := flag.String("location", "", "comma-separated target locations (default: built-in list)")
-	skillsFlag := flag.String("skills", "", "comma-separated tech stack for AI filtering (default: built-in list)")
+	skillsFlag := flag.String("skills", "", "comma-separated tech stack for filtering (default: built-in list)")
 	experienceFlag := flag.String("experience", "", "max years of experience, e.g. 3 or 1-3 (default: 3)")
 	dryRun := flag.Bool("dry-run", false, "print the message to stdout instead of sending to Telegram")
 	flag.Parse()
@@ -97,22 +97,32 @@ func main() {
 
 	client := &http.Client{Timeout: requestTimeout}
 
-	glintsJobs := fetchGlintsJobs(client)
-	jobstreetJobs := fetchJobstreetJobs(client)
+	fmt.Fprintln(os.Stderr, "job-alert: fetching")
+	kalibrrJobs := fetchKalibrrJobs(client)
+	kitalulusJobs := fetchKitalulusJobs(client, keywords)
+	deallsJobs := fetchDeallsJobs(client)
+	fmt.Fprintf(os.Stderr, "job-alert: fetched kalibrr=%d kitalulus=%d dealls=%d\n", len(kalibrrJobs), len(kitalulusJobs), len(deallsJobs))
 
-	glintsFiltered := filterJobs(glintsJobs)
-	jobstreetFiltered := filterJobs(jobstreetJobs)
+	kalibrrFiltered := filterJobs(kalibrrJobs)
+	kitalulusFiltered := filterJobs(kitalulusJobs)
+	deallsFiltered := filterJobs(deallsJobs)
 
-	glintsFinal := aiFilterJobs(client, glintsFiltered)
-	jsFinal := aiFilterJobs(client, jobstreetFiltered)
-	sortJobsByRelevance(glintsFinal)
-	sortJobsByRelevance(jsFinal)
-	glintsFinal = limitJobs(glintsFinal, jobsPerSource)
+	kalibrrFinal := aiFilterJobs(client, kalibrrFiltered, techStack)
+	kitalulusFinal := aiFilterJobs(client, kitalulusFiltered, techStack)
+	deallsFinal := aiFilterJobs(client, deallsFiltered, techStack)
+
+	sortJobsByRelevance(kalibrrFinal)
+	sortJobsByRelevance(kitalulusFinal)
+	sortJobsByRelevance(deallsFinal)
+	kalibrrFinal = limitJobs(kalibrrFinal, jobsPerSource)
+	kitalulusFinal = limitJobs(kitalulusFinal, jobsPerSource)
+	deallsFinal = limitJobs(deallsFinal, jobsPerSource)
+
 	greeting := "Selamat pagi! ☀️ Berikut update lowongan kerja terbaru hari ini:"
 	if *keywordsFlag != "" {
 		greeting = "Berikut hasil pencarian lowongan kerja:"
 	}
-	message := formatMessage(greeting, glintsFinal, jsFinal)
+	message := formatMessage(greeting, kalibrrFinal, kitalulusFinal, deallsFinal)
 
 	if *dryRun {
 		fmt.Println(message)
@@ -144,431 +154,41 @@ func parseMaxYears(s string) int {
 	return max
 }
 
-// --- Glints Fetcher ---
+// --- Shared fetch helpers ---
 
-type glintsGraphQLRequest struct {
-	OperationName string         `json:"operationName"`
-	Variables     map[string]any `json:"variables"`
-	Query         string         `json:"query"`
-}
-
-type glintsJob struct {
-	ID                    string               `json:"id"`
-	Title                 string               `json:"title"`
-	MinYearsOfExperience  *int                 `json:"minYearsOfExperience"`
-	MaxYearsOfExperience  *int                 `json:"maxYearsOfExperience"`
-	Status                string               `json:"status"`
-	CreatedAt             string               `json:"createdAt"`
-	Type                  string               `json:"type"`
-	WorkArrangementOption string               `json:"workArrangementOption"`
-	EducationLevel        string               `json:"educationLevel"`
-	ShouldShowSalary      bool                 `json:"shouldShowSalary"`
-	Company               glintsCompany        `json:"company"`
-	Location              glintsLocation       `json:"location"`
-	Salaries              []glintsSalary       `json:"salaries"`
-	Skills                []glintsSkillWrapper `json:"skills"`
-}
-
-type glintsCompany struct {
-	ID   string `json:"id"`
-	Name string `json:"name"`
-}
-
-type glintsLocation struct {
-	Name    string                 `json:"name"`
-	Parents []glintsLocationParent `json:"parents"`
-}
-
-type glintsLocationParent struct {
-	Name    string                      `json:"name"`
-	Parents []glintsLocationGrandParent `json:"parents"`
-}
-
-type glintsLocationGrandParent struct {
-	Name string `json:"name"`
-}
-
-type glintsSalary struct {
-	MinAmount    int    `json:"minAmount"`
-	MaxAmount    int    `json:"maxAmount"`
-	SalaryMode   string `json:"salaryMode"`
-	CurrencyCode string `json:"CurrencyCode"`
-}
-
-type glintsSkillWrapper struct {
-	Skill glintsSkill `json:"skill"`
-}
-
-type glintsSkill struct {
-	Name string `json:"name"`
-}
-
-type glintsSearchResponse struct {
-	Data struct {
-		SearchJobsV3 struct {
-			JobsInPage []glintsJob `json:"jobsInPage"`
-			HasMore    bool        `json:"hasMore"`
-		} `json:"searchJobsV3"`
-	} `json:"data"`
-}
-
-const glintsSearchQuery = `query searchJobsV3($data: JobSearchConditionInput!) {
-  searchJobsV3(data: $data) {
-    jobsInPage {
-      id
-      title
-      status
-      createdAt
-      type
-      workArrangementOption
-      educationLevel
-      shouldShowSalary
-      company {
-        id
-        name
-        __typename
-      }
-      location {
-        name
-        parents {
-          name
-          parents {
-            name
-            __typename
-          }
-          __typename
-        }
-        __typename
-      }
-      salaries {
-        minAmount
-        maxAmount
-        salaryMode
-        CurrencyCode
-        __typename
-      }
-      minYearsOfExperience
-      maxYearsOfExperience
-      skills {
-        skill {
-          name
-          __typename
-        }
-        __typename
-      }
-      __typename
-    }
-    hasMore
-    __typename
-  }
-}`
-
-func fetchGlintsJobs(client *http.Client) []Job {
-	var (
-		mu   sync.Mutex
-		all  []Job
-		seen = map[string]bool{}
-	)
-
-	var wg sync.WaitGroup
-	for _, keyword := range keywords {
-		wg.Add(1)
-		go func(kw string) {
-			defer wg.Done()
-			for page := 1; page <= glintsMaxPages; page++ {
-				vars := map[string]any{
-					"data": map[string]any{
-						"SearchTerm":          kw,
-						"CountryCode":         "ID",
-						"includeExternalJobs": true,
-						"pageSize":            jobsPerRequest,
-						"page":                page,
-					},
-				}
-
-				req := glintsGraphQLRequest{
-					OperationName: "searchJobsV3",
-					Variables:     vars,
-					Query:         glintsSearchQuery,
-				}
-
-				body, err := json.Marshal(req)
-				if err != nil {
-					continue
-				}
-
-				jobs, hasMore := doGlintsRequest(client, body)
-				mu.Lock()
-				for _, j := range jobs {
-					if seen[j.ID] {
-						continue
-					}
-					seen[j.ID] = true
-					all = append(all, glintsToJob(j))
-				}
-				mu.Unlock()
-
-				if !hasMore {
-					break
-				}
-			}
-		}(keyword)
-	}
-	wg.Wait()
-
-	return all
-}
-
-func doGlintsRequest(client *http.Client, body []byte) ([]glintsJob, bool) {
-	req, err := http.NewRequest(http.MethodPost, glintsGraphqlURL, bytes.NewReader(body))
-	if err != nil {
-		return nil, false
-	}
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Accept", "*/*")
-	req.Header.Set("x-glints-country-code", "ID")
-	req.Header.Set("User-Agent", "Mozilla/5.0 (compatible; JobAlertBot/1.0)")
-
-	resp, err := client.Do(req)
-	if err != nil {
-		return nil, false
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		return nil, false
-	}
-
-	var result glintsSearchResponse
-	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
-		return nil, false
-	}
-
-	return result.Data.SearchJobsV3.JobsInPage, result.Data.SearchJobsV3.HasMore
-}
-
-func glintsToJob(j glintsJob) Job {
-	loc := buildLocationString(j.Location)
-	salary := formatGlintsSalary(j.Salaries)
-	exp := formatExperience(j.MinYearsOfExperience, j.MaxYearsOfExperience)
-	skills := formatGlintsSkills(j.Skills)
-
-	return Job{
-		Title:       j.Title,
-		Company:     j.Company.Name,
-		Location:    loc,
-		URL:         fmt.Sprintf("https://glints.com/id/opportunities/jobs/%s", j.ID),
-		Source:      "glints",
-		Salary:      salary,
-		Type:        j.Type,
-		Experience:  exp,
-		Skills:      skills,
-		PostedAt:    j.CreatedAt,
-		MinYearsExp: derefInt(j.MinYearsOfExperience),
-		MaxYearsExp: derefInt(j.MaxYearsOfExperience),
-	}
-}
-
-func buildLocationString(loc glintsLocation) string {
-	parts := []string{loc.Name}
-	for _, p := range loc.Parents {
-		if p.Name != "" && p.Name != "Indonesia" {
-			parts = append(parts, p.Name)
-		}
-	}
-	return strings.Join(parts, ", ")
-}
-
-func formatGlintsSalary(salaries []glintsSalary) string {
-	if len(salaries) == 0 {
-		return ""
-	}
-	s := salaries[0]
-	if s.MinAmount == 0 && s.MaxAmount == 0 {
-		return ""
-	}
-	mode := ""
-	switch s.SalaryMode {
-	case "MONTH":
-		mode = "/bln"
-	case "YEAR":
-		mode = "/thn"
-	}
-	return fmt.Sprintf("Rp %s - %s jt%s", formatMillions(s.MinAmount), formatMillions(s.MaxAmount), mode)
-}
-
-func formatMillions(amount int) string {
-	m := float64(amount) / 1_000_000
-	if m == float64(int(m)) {
-		return fmt.Sprintf("%.0f", m)
-	}
-	return fmt.Sprintf("%.1f", m)
-}
-
-func formatExperience(min, max *int) string {
-	if min == nil && max == nil {
-		return ""
-	}
-	if min != nil && max != nil {
-		if *min == *max {
-			return fmt.Sprintf("%d tahun", *min)
-		}
-		return fmt.Sprintf("%d–%d tahun", *min, *max)
-	}
-	if min != nil {
-		return fmt.Sprintf("≥%d tahun", *min)
-	}
-	return fmt.Sprintf("≤%d tahun", *max)
-}
-
-func formatGlintsSkills(skills []glintsSkillWrapper) string {
-	names := make([]string, 0, len(skills))
-	for _, s := range skills {
-		names = append(names, s.Skill.Name)
-	}
-	return strings.Join(names, ", ")
-}
-
-// --- Jobstreet Fetcher ---
-
-// Jobstreet (SEEK) serves search results as server-side-rendered HTML.
-// Each job card carries data-automation="normalJob" with structured fields.
-// ponytail: regex on SSR HTML; ceiling = breaks if SEEK changes card markup.
+const browserUA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
 
 var (
-	jobstreetCardRe     = regexp.MustCompile(`data-automation="normalJob"`)
-	jobstreetIDRe       = regexp.MustCompile(`data-job-id="(\d+)"`)
-	jobstreetTitleRe    = regexp.MustCompile(`aria-label="([^"]+)"`)
-	jobstreetFieldRe    = regexp.MustCompile(`data-automation="(jobCompany|jobLocation|jobSalary|jobListingDate|jobClassification)"[^>]*>(.*?)</(?:a|span|div)>`)
-	jobstreetWorkTypeRe = regexp.MustCompile(`Ini adalah lowongan kerja ([^<]+)`)
-	htmlTagRe           = regexp.MustCompile(`<[^>]*>`)
+	nextDataRe       = regexp.MustCompile(`<script id="__NEXT_DATA__"[^>]*>(.*?)</script>`)
+	kitalulusCardRe  = regexp.MustCompile(`<a[^>]*href="/lowongan/detail/([^"]+)"[^>]*>(.*?)</a>`)
+	kitalulusTitleRe = regexp.MustCompile(`<h3[^>]*>(.*?)</h3>`)
+	kitalulusPRe     = regexp.MustCompile(`<p[^>]*>(.*?)</p>`)
+	htmlTagRe        = regexp.MustCompile(`<[^>]*>`)
+	liRe             = regexp.MustCompile(`<li[^>]*>(.*?)</li>`)
 )
 
-func fetchJobstreetJobs(client *http.Client) []Job {
-	var (
-		mu   sync.Mutex
-		all  []Job
-		seen = map[string]bool{}
-	)
-
-	var wg sync.WaitGroup
-	for _, keyword := range keywords {
-		wg.Add(1)
-		go func(kw string) {
-			defer wg.Done()
-			for page := 1; page <= jobstreetMaxPages; page++ {
-				jobs := fetchJobstreetPage(client, kw, page)
-				if len(jobs) == 0 {
-					break
-				}
-				mu.Lock()
-				for _, j := range jobs {
-					if seen[j.URL] {
-						continue
-					}
-					seen[j.URL] = true
-					all = append(all, j)
-				}
-				mu.Unlock()
-			}
-		}(keyword)
-	}
-	wg.Wait()
-
-	return all
-}
-
-func fetchJobstreetPage(client *http.Client, keyword string, page int) []Job {
-	url := fmt.Sprintf("%s?keywords=%s&page=%d",
-		jobstreetSearchURL,
-		strings.ReplaceAll(keyword, " ", "+"),
-		page,
-	)
-
+func fetchHTML(client *http.Client, url string) (string, error) {
 	req, err := http.NewRequest(http.MethodGet, url, nil)
 	if err != nil {
-		return nil
+		return "", err
 	}
 	req.Header.Set("Accept", "text/html,application/xhtml+xml")
 	req.Header.Set("Accept-Language", "id-ID,id;q=0.9")
-	req.Header.Set("User-Agent", "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Safari/537.36")
+	req.Header.Set("User-Agent", browserUA)
 
 	resp, err := client.Do(req)
 	if err != nil {
-		return nil
+		return "", err
 	}
 	defer resp.Body.Close()
-
 	if resp.StatusCode != http.StatusOK {
-		return nil
+		return "", fmt.Errorf("status %d", resp.StatusCode)
 	}
-
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return nil
+		return "", err
 	}
-
-	return parseJobstreetHTML(body)
-}
-
-func parseJobstreetHTML(html []byte) []Job {
-	text := string(html)
-
-	// Split into job cards by the card marker.
-	cardIndices := jobstreetCardRe.FindAllStringIndex(text, -1)
-	if len(cardIndices) == 0 {
-		return nil
-	}
-
-	jobs := make([]Job, 0, len(cardIndices))
-	for i, loc := range cardIndices {
-		start := loc[0]
-		end := len(text)
-		if i+1 < len(cardIndices) {
-			end = cardIndices[i+1][0]
-		}
-		card := text[start:end]
-
-		job := parseJobstreetCard(card)
-		if job.Title != "" && job.URL != "" {
-			jobs = append(jobs, job)
-		}
-	}
-
-	return jobs
-}
-
-func parseJobstreetCard(card string) Job {
-	var job Job
-	job.Source = "jobstreet"
-
-	if m := jobstreetIDRe.FindStringSubmatch(card); len(m) > 1 {
-		job.URL = fmt.Sprintf("https://id.jobstreet.com/id/job/%s", m[1])
-	}
-	if m := jobstreetTitleRe.FindStringSubmatch(card); len(m) > 1 {
-		job.Title = decodeHTML(m[1])
-	}
-
-	for _, m := range jobstreetFieldRe.FindAllStringSubmatch(card, -1) {
-		field := m[1]
-		value := decodeHTML(stripTags(m[2]))
-		switch field {
-		case "jobCompany":
-			job.Company = value
-		case "jobLocation":
-			job.Location = value
-		case "jobSalary":
-			job.Salary = value
-		case "jobListingDate":
-			job.PostedAt = value
-		}
-	}
-
-	if m := jobstreetWorkTypeRe.FindStringSubmatch(card); len(m) > 1 {
-		job.Type = decodeHTML(m[1])
-	}
-
-	return job
+	return string(body), nil
 }
 
 func stripTags(s string) string {
@@ -583,6 +203,308 @@ func decodeHTML(s string) string {
 	s = strings.ReplaceAll(s, "&quot;", `"`)
 	s = strings.ReplaceAll(s, "&#39;", "'")
 	return strings.TrimSpace(s)
+}
+
+func extractListItems(s string) string {
+	items := liRe.FindAllStringSubmatch(s, -1)
+	parts := make([]string, 0, len(items))
+	for _, m := range items {
+		if txt := decodeHTML(stripTags(m[1])); txt != "" {
+			parts = append(parts, txt)
+		}
+	}
+	return strings.Join(parts, ", ")
+}
+
+// --- Kalibrr Fetcher ---
+// Kalibrr is Next.js SSR; jobs are embedded in __NEXT_DATA__ JSON.
+
+type kalibrrJob struct {
+	ID          int    `json:"id"`
+	Name        string `json:"name"`
+	CompanyName string `json:"companyName"`
+	Company     struct {
+		Code string `json:"code"`
+	} `json:"company"`
+	Slug           string `json:"slug"`
+	Function       string `json:"function"`
+	CreatedAt      string `json:"createdAt"`
+	BaseSalary     *int   `json:"baseSalary"`
+	MaximumSalary  *int   `json:"maximumSalary"`
+	SalaryCurrency string `json:"salaryCurrency"`
+	GoogleLocation struct {
+		AddressComponents struct {
+			City   string `json:"city"`
+			Region string `json:"region"`
+		} `json:"addressComponents"`
+	} `json:"googleLocation"`
+	Qualifications string `json:"qualifications"`
+}
+
+type kalibrrNextData struct {
+	Props struct {
+		PageProps struct {
+			Jobs []kalibrrJob `json:"jobs"`
+		} `json:"pageProps"`
+	} `json:"props"`
+}
+
+func fetchKalibrrJobs(client *http.Client) []Job {
+	var all []Job
+	for page := 1; page <= maxPages; page++ {
+		url := fmt.Sprintf("%s?page=%d", kalibrrURL, page)
+		html, err := fetchHTML(client, url)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "job-alert: kalibrr fetch: %v\n", err)
+			break
+		}
+		jobs := parseKalibrrHTML(html)
+		if len(jobs) == 0 {
+			break
+		}
+		all = append(all, jobs...)
+	}
+	return all
+}
+
+func parseKalibrrHTML(html string) []Job {
+	m := nextDataRe.FindStringSubmatch(html)
+	if len(m) < 2 {
+		return nil
+	}
+	var data kalibrrNextData
+	if err := json.Unmarshal([]byte(m[1]), &data); err != nil {
+		fmt.Fprintf(os.Stderr, "job-alert: kalibrr parse: %v\n", err)
+		return nil
+	}
+	jobs := make([]Job, 0, len(data.Props.PageProps.Jobs))
+	for _, j := range data.Props.PageProps.Jobs {
+		loc := strings.TrimSpace(j.GoogleLocation.AddressComponents.City)
+		if r := strings.TrimSpace(j.GoogleLocation.AddressComponents.Region); r != "" && r != loc {
+			loc += ", " + r
+		}
+		u := fmt.Sprintf("https://www.kalibrr.com/id-ID/c/%s/jobs/%d/%s", j.Company.Code, j.ID, j.Slug)
+		jobs = append(jobs, Job{
+			Title:    j.Name,
+			Company:  j.CompanyName,
+			Location: loc,
+			URL:      u,
+			Source:   "kalibrr",
+			Salary:   formatSalaryRange(derefInt(j.BaseSalary), derefInt(j.MaximumSalary)),
+			Type:     j.Function,
+			Skills:   extractListItems(j.Qualifications),
+			PostedAt: j.CreatedAt,
+		})
+	}
+	return jobs
+}
+
+// --- Kitalulus Fetcher ---
+// Kitalulus is SSR; cards are <a href="/lowongan/detail/<slug>"> with <h3> title.
+
+func fetchKitalulusJobs(client *http.Client, searchKeywords []string) []Job {
+	var (
+		mu   sync.Mutex
+		all  []Job
+		seen = map[string]bool{}
+	)
+	var wg sync.WaitGroup
+	for _, kw := range searchKeywords {
+		wg.Add(1)
+		go func(keyword string) {
+			defer wg.Done()
+			url := fmt.Sprintf("%s?q=%s", kitalulusURL, url.QueryEscape(keyword))
+			html, err := fetchHTML(client, url)
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "job-alert: kitalulus fetch (%s): %v\n", keyword, err)
+				return
+			}
+			for _, j := range parseKitalulusHTML(html) {
+				mu.Lock()
+				if !seen[j.URL] {
+					seen[j.URL] = true
+					all = append(all, j)
+				}
+				mu.Unlock()
+			}
+		}(kw)
+	}
+	wg.Wait()
+	return all
+}
+
+func parseKitalulusHTML(html string) []Job {
+	matches := kitalulusCardRe.FindAllStringSubmatch(html, -1)
+	jobs := make([]Job, 0, len(matches))
+	for _, m := range matches {
+		slug, card := m[1], m[2]
+		title := ""
+		if tm := kitalulusTitleRe.FindStringSubmatch(card); len(tm) > 1 {
+			title = decodeHTML(stripTags(tm[1]))
+		}
+		company := ""
+		location := ""
+		firstP := true
+		for _, pm := range kitalulusPRe.FindAllStringSubmatch(card, -1) {
+			txt := decodeHTML(stripTags(pm[1]))
+			if txt == "" || txt == "Dipromosikan" {
+				continue
+			}
+			if isLocation(txt) {
+				location = txt
+				continue
+			}
+			if firstP {
+				company = strings.TrimSpace(strings.SplitN(txt, " - ", 2)[0])
+				firstP = false
+			}
+		}
+		jobs = append(jobs, Job{
+			Title:    title,
+			Company:  company,
+			Location: location,
+			URL:      "https://kitalulus.com/lowongan/detail/" + slug,
+			Source:   "kitalulus",
+		})
+	}
+	return jobs
+}
+
+func isLocation(s string) bool {
+	lower := strings.ToLower(s)
+	for _, loc := range targetLocations {
+		if strings.Contains(lower, loc) {
+			return true
+		}
+	}
+	return false
+}
+
+// --- Dealls Fetcher ---
+// Dealls is Next.js SSR; jobs are in __NEXT_DATA__.props.pageProps.dehydratedState.
+
+type deallsJob struct {
+	ID      string `json:"id"`
+	Slug    string `json:"slug"`
+	Role    string `json:"role"`
+	Company struct {
+		Name string `json:"name"`
+		Slug string `json:"slug"`
+	} `json:"company"`
+	City struct {
+		Name string `json:"name"`
+	} `json:"city"`
+	SalaryRange *struct {
+		Start int `json:"start"`
+		End   int `json:"end"`
+	} `json:"salaryRange"`
+	Skills []struct {
+		Name string `json:"name"`
+	} `json:"skills"`
+	WorkplaceType   string   `json:"workplaceType"`
+	EmploymentTypes []string `json:"employmentTypes"`
+	PublishedAt     string   `json:"publishedAt"`
+}
+
+type deallsNextData struct {
+	Props struct {
+		PageProps struct {
+			DehydratedState struct {
+				Queries []struct {
+					State struct {
+						Data struct {
+							Pages []struct {
+								Docs []deallsJob `json:"docs"`
+							} `json:"pages"`
+						} `json:"data"`
+					} `json:"state"`
+				} `json:"queries"`
+			} `json:"dehydratedState"`
+		} `json:"pageProps"`
+	} `json:"props"`
+}
+
+func fetchDeallsJobs(client *http.Client) []Job {
+	html, err := fetchHTML(client, deallsURL)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "job-alert: dealls fetch: %v\n", err)
+		return nil
+	}
+	return parseDeallsHTML(html)
+}
+
+func parseDeallsHTML(html string) []Job {
+	m := nextDataRe.FindStringSubmatch(html)
+	if len(m) < 2 {
+		return nil
+	}
+	var data deallsNextData
+	if err := json.Unmarshal([]byte(m[1]), &data); err != nil {
+		fmt.Fprintf(os.Stderr, "job-alert: dealls parse: %v\n", err)
+		return nil
+	}
+	var jobs []Job
+	for _, q := range data.Props.PageProps.DehydratedState.Queries {
+		for _, p := range q.State.Data.Pages {
+			for _, j := range p.Docs {
+				skills := make([]string, 0, len(j.Skills))
+				for _, s := range j.Skills {
+					skills = append(skills, s.Name)
+				}
+				u := fmt.Sprintf("https://dealls.com/loker/%s~%s", j.Slug, j.Company.Slug)
+				jobs = append(jobs, Job{
+					Title:    j.Role,
+					Company:  j.Company.Name,
+					Location: j.City.Name,
+					URL:      u,
+					Source:   "dealls",
+					Salary:   formatDeallsSalary(j.SalaryRange),
+					Type:     strings.Join(j.EmploymentTypes, ", "),
+					Skills:   strings.Join(skills, ", "),
+					PostedAt: j.PublishedAt,
+				})
+			}
+		}
+	}
+	return jobs
+}
+
+func formatDeallsSalary(r *struct {
+	Start int `json:"start"`
+	End   int `json:"end"`
+}) string {
+	if r == nil {
+		return ""
+	}
+	if r.Start == 0 && r.End == 0 {
+		return ""
+	}
+	if r.Start == r.End {
+		return fmt.Sprintf("Rp %s jt", formatMillions(r.Start))
+	}
+	return fmt.Sprintf("Rp %s - %s jt", formatMillions(r.Start), formatMillions(r.End))
+}
+
+func formatSalaryRange(min, max int) string {
+	if min == 0 && max == 0 {
+		return ""
+	}
+	if min != 0 && max != 0 && min != max {
+		return fmt.Sprintf("Rp %s - %s jt", formatMillions(min), formatMillions(max))
+	}
+	v := min
+	if v == 0 {
+		v = max
+	}
+	return fmt.Sprintf("Rp %s jt", formatMillions(v))
+}
+
+func formatMillions(amount int) string {
+	m := float64(amount) / 1_000_000
+	if m == float64(int(m)) {
+		return fmt.Sprintf("%.0f", m)
+	}
+	return fmt.Sprintf("%.1f", m)
 }
 
 // --- Location Filtering ---
@@ -639,41 +561,33 @@ type responsesRequest struct {
 	Input        string `json:"input"`
 }
 
-type responsesContent struct {
-	Type string `json:"type"`
-	Text string `json:"text"`
-}
-
-type responsesOutputItem struct {
-	Type    string             `json:"type"`
-	Content []responsesContent `json:"content"`
-}
-
 type responsesResponse struct {
-	Output []responsesOutputItem `json:"output"`
+	Output []struct {
+		Content []struct {
+			Text string `json:"text"`
+		} `json:"content"`
+	} `json:"output"`
 }
 
-func aiFilterJobs(client *http.Client, jobs []Job) []Job {
+func aiFilterJobs(client *http.Client, jobs []Job, stack []string) []Job {
 	if len(jobs) == 0 {
 		return nil
 	}
 
 	jobsJSON, _ := json.Marshal(jobs)
 
-	instructions := fmt.Sprintf(`Kamu adalah filter lowongan kerja. Analisis setiap job listing JSON dan RETURN HANYA array JSON dari job yang match kriteria:
+	instructions := fmt.Sprintf(`Kamu filter lowongan kerja. Dari JSON di bawah, return HANYA array JSON job yang match kriteria:
 
 TECH STACK (minimal 1 match):
 %s
 
-PENGALAMAN KERJA: 1-3 tahun (toleransi jika tidak disebutkan atau <=3 tahun).
-
-LOKASI: jabodetabek, bandung, surabaya, bali, batam, solo, salatiga, karawang, cikampek, cikarang.
+PENGALAMAN KERJA: 1-3 tahun (toleransi jika tidak disebutkan atau <=3).
 
 Rules:
 - Return HANYA JSON array, tanpa teks lain, tanpa markdown.
 - Jangan ubah struktur object job, kembalikan object aslinya persis.
 - Kalau tidak ada yang match, return [].
-- Maksimal 30 job.`, strings.Join(techStack, ", "))
+- Maksimal 30 job.`, strings.Join(stack, ", "))
 
 	req := responsesRequest{
 		Model:        "deepseek-v4-pro",
@@ -690,17 +604,14 @@ Rules:
 	if err != nil {
 		return jobs
 	}
-
-	apiKey := os.Getenv("SUMOPOD_API_KEY")
 	httpReq.Header.Set("Content-Type", "application/json")
-	httpReq.Header.Set("Authorization", "Bearer "+apiKey)
+	httpReq.Header.Set("Authorization", "Bearer "+os.Getenv("SUMOPOD_API_KEY"))
 
 	resp, err := client.Do(httpReq)
 	if err != nil {
 		return jobs
 	}
 	defer resp.Body.Close()
-
 	if resp.StatusCode != http.StatusOK {
 		return jobs
 	}
@@ -710,16 +621,11 @@ Rules:
 		return jobs
 	}
 
-	content := extractResponsesText(rresp)
-	content = cleanJSONResponse(content)
-
+	content := cleanJSONResponse(extractResponsesText(rresp))
 	var filtered []Job
 	if err := json.Unmarshal([]byte(content), &filtered); err != nil || len(filtered) == 0 {
-		// ponytail: AI returned nothing or unparseable — keep the pre-filtered list.
-		// Ceiling: unfiltered jobs may include non-matching tech stacks. Upgrade: deterministic skill filter.
 		return jobs
 	}
-
 	return filtered
 }
 
@@ -734,7 +640,6 @@ func extractResponsesText(r responsesResponse) string {
 	return ""
 }
 
-// cleanJSONResponse extracts JSON array from AI response that may have markdown wrappers.
 func cleanJSONResponse(s string) string {
 	s = strings.TrimSpace(s)
 	if idx := strings.Index(s, "```json"); idx >= 0 {
@@ -745,39 +650,37 @@ func cleanJSONResponse(s string) string {
 	if idx := strings.LastIndex(s, "```"); idx >= 0 {
 		s = s[:idx]
 	}
-	s = strings.TrimSpace(s)
-	return s
+	return strings.TrimSpace(s)
 }
 
 // --- Message Formatter ---
 
-func formatMessage(greeting string, glintsJobs, jobstreetJobs []Job) string {
+func formatMessage(greeting string, kalibrrJobs, kitalulusJobs, deallsJobs []Job) string {
 	var b strings.Builder
 
 	b.WriteString(greeting)
 	b.WriteString("\n\nDaftar Job Terbaru:\n\n")
 
-	b.WriteString("A. Glints\n\n")
-	if len(glintsJobs) == 0 {
-		b.WriteString("Tidak ada lowongan baru yang sesuai kriteria.\n\n")
-	} else {
-		for i, j := range glintsJobs {
-			writeJobEntry(&b, i+1, j)
-		}
-	}
-
-	b.WriteString("\nB. Jobstreet\n\n")
-	if len(jobstreetJobs) == 0 {
-		b.WriteString("Tidak ada lowongan baru yang sesuai kriteria.\n\n")
-	} else {
-		for i, j := range jobstreetJobs {
-			writeJobEntry(&b, i+1, j)
-		}
-	}
+	writeSection(&b, "A. Kalibrr", kalibrrJobs)
+	writeSection(&b, "B. Kitalulus", kitalulusJobs)
+	writeSection(&b, "C. Dealls", deallsJobs)
 
 	b.WriteString("\n— Dikirim otomatis oleh Job Alert Bot")
 
 	return b.String()
+}
+
+func writeSection(b *strings.Builder, header string, jobs []Job) {
+	b.WriteString(header)
+	b.WriteString("\n\n")
+	if len(jobs) == 0 {
+		b.WriteString("Tidak ada lowongan baru yang sesuai kriteria.\n\n")
+		return
+	}
+	for i, j := range jobs {
+		writeJobEntry(b, i+1, j)
+	}
+	b.WriteString("\n")
 }
 
 func writeJobEntry(b *strings.Builder, num int, j Job) {
@@ -810,16 +713,21 @@ func sendTelegram(client *http.Client, message string) {
 	chatID := os.Getenv("TELEGRAM_USER_ID")
 
 	if botToken == "" || chatID == "" {
-		fmt.Fprintln(os.Stderr, "TELEGRAM_BOT_TOKEN or TELEGRAM_USER_ID not set, printing message to stdout instead.")
+		fmt.Fprintln(os.Stderr, "job-alert: TELEGRAM_BOT_TOKEN or TELEGRAM_USER_ID not set, printing to stdout")
 		fmt.Println(message)
 		return
 	}
 
 	url := fmt.Sprintf("%s/bot%s/sendMessage", telegramAPIURL, botToken)
 
+	text := message
+	if len(message) > 4000 {
+		text = message[:4000] + "\n\n— (dipotong karena terlalu panjang)"
+	}
+
 	payload := map[string]string{
 		"chat_id":                  chatID,
-		"text":                     message,
+		"text":                     text,
 		"parse_mode":               "Markdown",
 		"disable_web_page_preview": "true",
 	}
@@ -828,19 +736,9 @@ func sendTelegram(client *http.Client, message string) {
 	req, _ := http.NewRequest(http.MethodPost, url, bytes.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
 
-	// Truncate if too long for Telegram (4096 chars)
-	if len(message) > 4000 {
-		payload["text"] = message[:4000] + "\n\n— (dipotong karena terlalu panjang)"
-		body, _ = json.Marshal(payload)
-		req, _ = http.NewRequest(http.MethodPost, url, bytes.NewReader(body))
-		req.Header.Set("Content-Type", "application/json")
-	}
-
 	resp, err := client.Do(req)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "failed to send telegram message: %v\n", err)
-		// ponytail: fallback to stdout on error
-		// Ceiling: if Telegram is down, message is lost. Upgrade path: add retry queue.
+		fmt.Fprintf(os.Stderr, "job-alert: failed to send telegram message: %v\n", err)
 		fmt.Println(message)
 		return
 	}
@@ -848,9 +746,11 @@ func sendTelegram(client *http.Client, message string) {
 
 	if resp.StatusCode != http.StatusOK {
 		respBody, _ := io.ReadAll(resp.Body)
-		fmt.Fprintf(os.Stderr, "telegram API error (%d): %s\n", resp.StatusCode, string(respBody))
+		fmt.Fprintf(os.Stderr, "job-alert: telegram API error (%d): %s\n", resp.StatusCode, string(respBody))
 		fmt.Println(message)
+		return
 	}
+	fmt.Fprintln(os.Stderr, "job-alert: message sent to Telegram")
 }
 
 func derefInt(p *int) int {
