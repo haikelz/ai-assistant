@@ -60,7 +60,7 @@ func TestFinanceAPIProxiesResponsesToSumopod(t *testing.T) {
 	defer upstream.Close()
 
 	s := testServer(t, upstream.URL+"/v1/responses")
-	request := httptest.NewRequest(http.MethodPost, "/openai/v1/responses", bytes.NewBufferString(`{"model":"deepseek-v4-pro"}`))
+	request := httptest.NewRequest(http.MethodPost, "/openai/v1/responses", bytes.NewBufferString(`{"model":"deepseek-v4-flash"}`))
 	request.Header.Set("Authorization", "Bearer sumopod-key")
 	response := httptest.NewRecorder()
 	s.routes().ServeHTTP(response, request)

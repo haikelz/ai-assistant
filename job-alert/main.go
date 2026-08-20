@@ -590,7 +590,7 @@ Rules:
 - Maksimal 30 job.`, strings.Join(stack, ", "))
 
 	req := responsesRequest{
-		Model:        "deepseek-v4-pro",
+		Model:        "deepseek-v4-flash",
 		Instructions: instructions,
 		Input:        string(jobsJSON),
 	}

@@ -1,6 +1,6 @@
 # AI Assistant
 
-PicoClaw Telegram assistant using Sumopod's Responses API with `deepseek-v4-pro`, plus two local Go services: a finance API and a job-alert module that scrapes Glints and Jobstreet.
+PicoClaw Telegram assistant using Sumopod's Responses API with `deepseek-v4-flash`, plus two local Go services: a finance API and a job-alert module that scrapes Glints and Jobstreet.
 
 ## Setup
 
@@ -79,10 +79,10 @@ Runs automatically at 03:00 Asia/Jakarta via `loker-bot.sh` with default keyword
 
 ### Data sources
 
-| Source | Method | Endpoint |
-|---|---|---|
-| Glints | GraphQL (`searchJobsV3`) | `https://glints.com/api/v2-alc/graphql` |
-| Jobstreet | SSR HTML scraping | `https://id.jobstreet.com/id/jobs?keywords=…` |
+| Source    | Method                   | Endpoint                                      |
+| --------- | ------------------------ | --------------------------------------------- |
+| Glints    | GraphQL (`searchJobsV3`) | `https://glints.com/api/v2-alc/graphql`       |
+| Jobstreet | SSR HTML scraping        | `https://id.jobstreet.com/id/jobs?keywords=…` |
 
 Jobstreet (SEEK) renders search results server-side; `job-alert` parses `data-automation="normalJob"` job cards for title, company, location, salary, work type, and listing date. Glints exposes a public GraphQL endpoint that returns structured jobs directly.
 
@@ -105,20 +105,20 @@ Telegram /loker → loker-bot.sh (intercepts via getUpdates)
 
 ### Architecture
 
-| Service | Port | Role |
-|---|---|---|
-| picoclaw | 18790 | AI agent gateway, Telegram bot |
-| finance-api | 8080 | Finance ledger + Google Sheets sync + Sumopod Responses proxy |
-| loker-api | 8081 | HTTP endpoint that runs a job search on request |
-| loker-bot | — | Background: intercepts `/loker` and runs the 03:00 daily alert |
-| job-alert | — | Go binary: fetch, filter, and deliver job listings |
+| Service     | Port  | Role                                                           |
+| ----------- | ----- | -------------------------------------------------------------- |
+| picoclaw    | 18790 | AI agent gateway, Telegram bot                                 |
+| finance-api | 8080  | Finance ledger + Google Sheets sync + Sumopod Responses proxy  |
+| loker-api   | 8081  | HTTP endpoint that runs a job search on request                |
+| loker-bot   | —     | Background: intercepts `/loker` and runs the 03:00 daily alert |
+| job-alert   | —     | Go binary: fetch, filter, and deliver job listings             |
 
 ### Binaries and scripts
 
-| Path | Purpose |
-|---|---|
-| `job-alert/main.go` | Fetcher + filter + Telegram delivery (one-shot binary) |
-| `job-alert/loker.sh` | Wrapper that parses the `\|` query into `job-alert` flags |
-| `job-alert/loker-bot.sh` | Telegram poller for `/loker` + daily cron scheduler |
-| `loker-api/main.go` | HTTP service (`POST /loker`) that spawns `loker` in the background |
-| `finance-api/` | Finance ledger, recap, and Sumopod Responses proxy |
+| Path                     | Purpose                                                            |
+| ------------------------ | ------------------------------------------------------------------ |
+| `job-alert/main.go`      | Fetcher + filter + Telegram delivery (one-shot binary)             |
+| `job-alert/loker.sh`     | Wrapper that parses the `\|` query into `job-alert` flags          |
+| `job-alert/loker-bot.sh` | Telegram poller for `/loker` + daily cron scheduler                |
+| `loker-api/main.go`      | HTTP service (`POST /loker`) that spawns `loker` in the background |
+| `finance-api/`           | Finance ledger, recap, and Sumopod Responses proxy                 |
