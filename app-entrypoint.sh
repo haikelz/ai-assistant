@@ -23,6 +23,15 @@ until curl -fsS http://127.0.0.1:8081/health >/dev/null; do
   sleep 0.1
 done
 
+# Rebuild runtime Telegram config from the container secret. This avoids a
+# stale PVC or an older init-container file disabling the bot.
+mkdir -p /root/.picoclaw
+CLEAN_BOT_TOKEN=$(printenv TELEGRAM_BOT_TOKEN | tr -d '\r\n')
+if [ -n "$CLEAN_BOT_TOKEN" ]; then
+  printf 'channels:\n  telegram:\n    settings:\n      token: "%s"\n' "$CLEAN_BOT_TOKEN" > /root/.picoclaw/.security.yml
+  chmod 600 /root/.picoclaw/.security.yml
+fi
+
 # Start loker-bot for daily job alert at 3 AM
 loker-bot.sh &
 
