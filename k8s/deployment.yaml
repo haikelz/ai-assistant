@@ -23,7 +23,7 @@ spec:
             claimName: ai-assistant-data
       initContainers:
         - name: initialize-workspace
-          image: ${IMAGE}
+          image: haikelilham/ai-assistant
           imagePullPolicy: Always
           command: ["/bin/sh", "-ec"]
           args:
@@ -47,7 +47,7 @@ spec:
             - name: picoclaw-data
               mountPath: /root/.picoclaw
         - name: initialize-paycheck-reminder
-          image: ${IMAGE}
+          image: haikelilham/ai-assistant
           imagePullPolicy: Always
           command: ["/bin/sh", "-ec"]
           args:
@@ -68,7 +68,7 @@ spec:
               mountPath: /root/.picoclaw
       containers:
         - name: picoclaw
-          image: ${IMAGE}
+          image: haikelilham/ai-assistant
           env:
             - name: TZ
               value: Asia/Jakarta
