@@ -75,43 +75,28 @@ type Job struct {
 }
 
 func main() {
-	keywordsFlag := flag.String("keywords", "", "comma-separated search keywords (default: built-in list)")
-	locationFlag := flag.String("location", "", "comma-separated target locations (default: built-in list)")
-	skillsFlag := flag.String("skills", "", "comma-separated tech stack for filtering (default: built-in list)")
-	experienceFlag := flag.String("experience", "", "max years of experience, e.g. 3 or 1-3 (default: 3)")
-	dryRun := flag.Bool("dry-run", false, "print the message to stdout instead of sending to Telegram")
+	keywordsFlag := flag.String("keywords", "", "comma-separated job titles")
+	locationFlag := flag.String("location", "", "comma-separated locations")
+	skillsFlag := flag.String("skills", "", "comma-separated skills")
+	experienceFlag := flag.String("experience", "", "experience range, e.g. 1-3")
+	dryRun := flag.Bool("dry-run", false, "print instead of sending")
 	flag.Parse()
 
-	if *keywordsFlag != "" {
-		keywords = splitAndTrim(*keywordsFlag)
-	}
-	if *locationFlag != "" {
-		targetLocations = splitAndTrim(*locationFlag)
-	}
-	if *skillsFlag != "" {
-		techStack = splitAndTrim(*skillsFlag)
-	}
-	if *experienceFlag != "" {
-		maxYearsExp = parseMaxYears(*experienceFlag)
-	}
+	keywords = splitAndTrim(*keywordsFlag)
+	targetLocations = splitAndTrim(*locationFlag)
+	techStack = splitAndTrim(*skillsFlag)
+	maxYearsExp = parseMaxYears(*experienceFlag)
 
 	client := &http.Client{Timeout: requestTimeout}
-
 	fmt.Fprintln(os.Stderr, "job-alert: fetching")
-	kalibrrJobs := fetchKalibrrJobs(client)
+	kalibrrJobs := fetchKalibrrJobs(client, keywords)
 	kitalulusJobs := fetchKitalulusJobs(client, keywords)
 	deallsJobs := fetchDeallsJobs(client)
 	fmt.Fprintf(os.Stderr, "job-alert: fetched kalibrr=%d kitalulus=%d dealls=%d\n", len(kalibrrJobs), len(kitalulusJobs), len(deallsJobs))
 
-	kalibrrFiltered := filterJobs(kalibrrJobs)
-	kitalulusFiltered := filterJobs(kitalulusJobs)
-	deallsFiltered := filterJobs(deallsJobs)
-	fmt.Fprintf(os.Stderr, "job-alert: after location/exp filter kalibrr=%d kitalulus=%d dealls=%d\n", len(kalibrrFiltered), len(kitalulusFiltered), len(deallsFiltered))
-	kalibrrFinal := filterByKeywordOrSkill(kalibrrFiltered, keywords, techStack)
-	kitalulusFinal := filterByKeywordOrSkill(kitalulusFiltered, keywords, techStack)
-	deallsFinal := filterByKeywordOrSkill(deallsFiltered, keywords, techStack)
-	fmt.Fprintf(os.Stderr, "job-alert: after AI filter kalibrr=%d kitalulus=%d dealls=%d\n", len(kalibrrFinal), len(kitalulusFinal), len(deallsFinal))
-
+	kalibrrFinal := filterByKeywordOrSkill(filterJobs(kalibrrJobs), keywords, techStack)
+	kitalulusFinal := filterByKeywordOrSkill(filterJobs(kitalulusJobs), keywords, techStack)
+	deallsFinal := filterByKeywordOrSkill(filterJobs(deallsJobs), keywords, techStack)
 	sortJobsByRelevance(kalibrrFinal)
 	sortJobsByRelevance(kitalulusFinal)
 	sortJobsByRelevance(deallsFinal)
@@ -124,7 +109,6 @@ func main() {
 		greeting = "Berikut hasil pencarian lowongan kerja:"
 	}
 	message := formatMessage(greeting, kalibrrFinal, kitalulusFinal, deallsFinal)
-
 	if *dryRun {
 		fmt.Println(message)
 		return
@@ -250,11 +234,20 @@ type kalibrrNextData struct {
 	} `json:"props"`
 }
 
-func fetchKalibrrJobs(client *http.Client) []Job {
+func fetchKalibrrJobs(client *http.Client, searchKeywords []string) []Job {
 	var all []Job
+	query := strings.Join(searchKeywords, " ")
 	for page := 1; page <= maxPages; page++ {
-		url := fmt.Sprintf("%s?page=%d", kalibrrURL, page)
-		html, err := fetchHTML(client, url)
+		searchURL := kalibrrURL
+		if query != "" {
+			searchURL += "?query=" + url.QueryEscape(query)
+			if page > 1 {
+				searchURL += fmt.Sprintf("&page=%d", page)
+			}
+		} else if page > 1 {
+			searchURL += fmt.Sprintf("?page=%d", page)
+		}
+		html, err := fetchHTML(client, searchURL)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "job-alert: kalibrr fetch: %v\n", err)
 			break
@@ -548,7 +541,7 @@ func matchesExperience(j Job) bool {
 func filterJobs(jobs []Job) []Job {
 	var filtered []Job
 	for _, j := range jobs {
-		if matchesLocation(j.Location) && matchesExperience(j) {
+		if (len(targetLocations) == 0 || matchesLocation(j.Location)) && matchesExperience(j) {
 			filtered = append(filtered, j)
 		}
 	}
@@ -580,7 +573,7 @@ func filterByKeywordOrSkill(jobs []Job, searchKeywords, stack []string) []Job {
 				break
 			}
 		}
-		if !matched {
+		if !matched && len(stack) > 0 {
 			for _, skill := range stack {
 				if len(skill) >= 3 && strings.Contains(text, strings.ToLower(skill)) {
 					matched = true
