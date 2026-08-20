@@ -106,10 +106,11 @@ func main() {
 	kalibrrFiltered := filterJobs(kalibrrJobs)
 	kitalulusFiltered := filterJobs(kitalulusJobs)
 	deallsFiltered := filterJobs(deallsJobs)
-
-	kalibrrFinal := aiFilterJobs(client, kalibrrFiltered, techStack)
-	kitalulusFinal := aiFilterJobs(client, kitalulusFiltered, techStack)
-	deallsFinal := aiFilterJobs(client, deallsFiltered, techStack)
+	fmt.Fprintf(os.Stderr, "job-alert: after location/exp filter kalibrr=%d kitalulus=%d dealls=%d\n", len(kalibrrFiltered), len(kitalulusFiltered), len(deallsFiltered))
+	kalibrrFinal := filterByKeywordOrSkill(kalibrrFiltered, keywords, techStack)
+	kitalulusFinal := filterByKeywordOrSkill(kitalulusFiltered, keywords, techStack)
+	deallsFinal := filterByKeywordOrSkill(deallsFiltered, keywords, techStack)
+	fmt.Fprintf(os.Stderr, "job-alert: after AI filter kalibrr=%d kitalulus=%d dealls=%d\n", len(kalibrrFinal), len(kitalulusFinal), len(deallsFinal))
 
 	sortJobsByRelevance(kalibrrFinal)
 	sortJobsByRelevance(kitalulusFinal)
@@ -510,13 +511,24 @@ func formatMillions(amount int) string {
 // --- Location Filtering ---
 
 func matchesLocation(location string) bool {
-	lower := strings.ToLower(location)
+	lower := normalizeLocation(location)
 	for _, loc := range targetLocations {
-		if strings.Contains(lower, loc) {
+		if strings.Contains(lower, normalizeLocation(loc)) {
 			return true
 		}
 	}
 	return false
+}
+
+func normalizeLocation(s string) string {
+	s = strings.ToLower(strings.TrimSpace(s))
+	s = strings.ReplaceAll(s, "south jakarta", "jakarta selatan")
+	s = strings.ReplaceAll(s, "central jakarta", "jakarta pusat")
+	s = strings.ReplaceAll(s, "north jakarta", "jakarta utara")
+	s = strings.ReplaceAll(s, "west jakarta", "jakarta barat")
+	s = strings.ReplaceAll(s, "east jakarta", "jakarta timur")
+	s = strings.ReplaceAll(s, "jakarta raya", "jakarta")
+	return s
 }
 
 // --- Experience Filtering ---
@@ -550,7 +562,40 @@ func limitJobs(jobs []Job, limit int) []Job {
 	return jobs[:limit]
 }
 
-// --- AI Filtering ---
+// --- Deterministic Relevance Filtering ---
+
+func filterByKeywordOrSkill(jobs []Job, searchKeywords, stack []string) []Job {
+	var out []Job
+	for _, j := range jobs {
+		text := strings.ToLower(j.Title + " " + j.Skills + " " + j.Company)
+		matched := false
+		for _, kw := range searchKeywords {
+			for _, word := range strings.Fields(kw) {
+				if len(word) > 2 && strings.Contains(text, strings.ToLower(word)) {
+					matched = true
+					break
+				}
+			}
+			if matched {
+				break
+			}
+		}
+		if !matched {
+			for _, skill := range stack {
+				if len(skill) >= 3 && strings.Contains(text, strings.ToLower(skill)) {
+					matched = true
+					break
+				}
+			}
+		}
+		if matched {
+			out = append(out, j)
+		}
+	}
+	return out
+}
+
+// --- AI Filtering (unused compatibility types) ---
 
 // Sumopod exposes the OpenAI Responses API (not chat completions).
 // Request: {model, instructions, input}; response: output[].content[].text.
