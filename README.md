@@ -1,6 +1,6 @@
 # AI Assistant
 
-PicoClaw Telegram assistant using Sumopod's Responses API with `deepseek-v4-flash`, plus two local Go services: a finance API and a job-alert module that scrapes Glints and Jobstreet.
+PicoClaw Telegram assistant using Sumopod's Responses API with `deepseek-v4-flash`, plus two local Go services: a finance API and a job-alert module that scrapes Kitalulus and Dealls.
 
 ## Setup
 
@@ -53,12 +53,12 @@ The paycheck reminder runs at 09:00 Asia/Jakarta every 28th. `/downloadrecap` se
 
 ## Job Search (`/loker`)
 
-Search job listings from Glints and Jobstreet with AI-powered filtering.
+Search job listings from Kitalulus and Dealls with deterministic filtering.
 
 ### Usage
 
 ```
-/loker <posisi> | <skills> | <pengalaman> | <lokasi>
+/loker <posisi> | <skills> | <pengalaman> | <lokasi> | [halal]
 ```
 
 Examples:
@@ -66,10 +66,17 @@ Examples:
 ```
 /loker react developer | react,typescript | 1-3 | jakarta
 /loker golang engineer | golang,postgresql,docker | 1-3 | jakarta,bandung
+/loker software engineer | go,typescript | 1-3 | jakarta | halal
 /loker frontend developer
 ```
 
-Fields after `|` are optional — defaults to `react,node,typescript`, `1-3` years, and `jakarta`.
+The fifth field is optional. When set to `halal`, AI assesses each company's primary business against these criteria:
+
+1. It does not primarily produce or sell prohibited goods or services.
+2. Its primary business model is not connected to interest-based financing.
+3. It is not a bank, insurance company, online lender, or interest-based financing business.
+
+Every result remains visible and receives one label: `Halal`, `Tidak Halal — <reason>`, or `Perlu Riset`. The conservative `Perlu Riset` label is used when evidence is insufficient, the AI request fails, or no API key is configured. Without the `halal` field, no company assessment is requested and no label is shown.
 
 ### Daily cron
 
@@ -79,28 +86,29 @@ Runs automatically at 03:00 Asia/Jakarta via `loker-bot.sh` with default keyword
 
 ### Data sources
 
-| Source    | Method                   | Endpoint                                      |
-| --------- | ------------------------ | --------------------------------------------- |
-| Glints    | GraphQL (`searchJobsV3`) | `https://glints.com/api/v2-alc/graphql`       |
-| Jobstreet | SSR HTML scraping        | `https://id.jobstreet.com/id/jobs?keywords=…` |
+| Source    | Method            | Endpoint                         |
+| --------- | ----------------- | -------------------------------- |
+| Kitalulus | SSR HTML scraping | `https://kitalulus.com/lowongan` |
+| Dealls    | Next.js SSR data  | `https://dealls.com/loker`       |
 
-Jobstreet (SEEK) renders search results server-side; `job-alert` parses `data-automation="normalJob"` job cards for title, company, location, salary, work type, and listing date. Glints exposes a public GraphQL endpoint that returns structured jobs directly.
+Dealls exposes structured job data in its server-rendered Next.js pages. Kitalulus listings are parsed from server-rendered job cards.
 
 ### Filtering
 
 1. **Location** — substring match against Jabodetabek, Bandung, Surabaya, Bali, Batam, Solo, Salatiga, Karawang, Cikampek, Cikarang.
 2. **Experience** — `maxYearsExp` bound (default 3 years); jobs with `minYearsOfExperience > 3` are dropped.
-3. **Tech stack** — passed to Sumopod's Responses API (`/v1/responses`); the AI returns only matching jobs. If the AI returns nothing or an unparseable response, the pre-filtered list is kept.
+3. **Position and tech stack** — deterministic text matching against titles and available skill metadata. Listings without skill metadata are retained when their title matches.
+4. **Optional company assessment** — when `halal` is specified, Sumopod classifies unique companies after job filtering. This is an informational AI assessment, not a religious ruling.
 
 Max 20 results per source.
 
 ### How `/loker` works
 
 ```
-Telegram /loker → loker-bot.sh (intercepts via getUpdates)
+Telegram /loker → PicoClaw job-search skill → loker-api
                   → /usr/local/bin/loker "<query>"
                   → job-alert --keywords … --skills … --experience … --location …
-                  → fetch Glints + Jobstreet → filter → Sumopod AI filter → Telegram
+                  → fetch Kitalulus + Dealls → filter → optional halal assessment → Telegram
 ```
 
 ### Architecture
@@ -110,7 +118,7 @@ Telegram /loker → loker-bot.sh (intercepts via getUpdates)
 | picoclaw    | 18790 | AI agent gateway, Telegram bot                                 |
 | finance-api | 8080  | Finance ledger + Google Sheets sync + Sumopod Responses proxy  |
 | loker-api   | 8081  | HTTP endpoint that runs a job search on request                |
-| loker-bot   | —     | Background: intercepts `/loker` and runs the 03:00 daily alert |
+| loker-bot   | —     | Background scheduler for the 03:00 daily alert                 |
 | job-alert   | —     | Go binary: fetch, filter, and deliver job listings             |
 
 ### Binaries and scripts
@@ -119,6 +127,6 @@ Telegram /loker → loker-bot.sh (intercepts via getUpdates)
 | ------------------------ | ------------------------------------------------------------------ |
 | `job-alert/main.go`      | Fetcher + filter + Telegram delivery (one-shot binary)             |
 | `job-alert/loker.sh`     | Wrapper that parses the `\|` query into `job-alert` flags          |
-| `job-alert/loker-bot.sh` | Telegram poller for `/loker` + daily cron scheduler                |
+| `job-alert/loker-bot.sh` | Daily job-alert scheduler                                          |
 | `loker-api/main.go`      | HTTP service (`POST /loker`) that spawns `loker` in the background |
 | `finance-api/`           | Finance ledger, recap, and Sumopod Responses proxy                 |

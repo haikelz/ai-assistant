@@ -17,14 +17,12 @@ import (
 )
 
 const (
-	kalibrrURL     = "https://www.kalibrr.com/id-ID/job-board/te/software"
 	kitalulusURL   = "https://kitalulus.com/lowongan"
 	deallsURL      = "https://dealls.com/loker"
 	sumopodURL     = "https://ai.sumopod.com/v1/responses"
 	telegramAPIURL = "https://api.telegram.org"
 	requestTimeout = 30 * time.Second
 	jobsPerSource  = 20
-	maxPages       = 2
 )
 
 var keywords = []string{
@@ -72,6 +70,8 @@ type Job struct {
 	PostedAt    string `json:"posted_at"`
 	MinYearsExp int    `json:"min_years_exp"`
 	MaxYearsExp int    `json:"max_years_exp"`
+	HalalStatus string `json:"-"`
+	HalalReason string `json:"-"`
 }
 
 func main() {
@@ -79,6 +79,7 @@ func main() {
 	locationFlag := flag.String("location", "", "comma-separated locations")
 	skillsFlag := flag.String("skills", "", "comma-separated skills")
 	experienceFlag := flag.String("experience", "", "experience range, e.g. 1-3")
+	halalFlag := flag.Bool("halal", false, "assess company business against halal criteria")
 	dryRun := flag.Bool("dry-run", false, "print instead of sending")
 	flag.Parse()
 
@@ -89,26 +90,26 @@ func main() {
 
 	client := &http.Client{Timeout: requestTimeout}
 	fmt.Fprintln(os.Stderr, "job-alert: fetching")
-	kalibrrJobs := fetchKalibrrJobs(client, keywords)
 	kitalulusJobs := fetchKitalulusJobs(client, keywords)
-	deallsJobs := fetchDeallsJobs(client)
-	fmt.Fprintf(os.Stderr, "job-alert: fetched kalibrr=%d kitalulus=%d dealls=%d\n", len(kalibrrJobs), len(kitalulusJobs), len(deallsJobs))
+	deallsJobs := fetchDeallsJobs(client, keywords)
+	fmt.Fprintf(os.Stderr, "job-alert: fetched kitalulus=%d dealls=%d\n", len(kitalulusJobs), len(deallsJobs))
 
-	kalibrrFinal := filterByKeywordOrSkill(filterJobs(kalibrrJobs), keywords, techStack)
 	kitalulusFinal := filterByKeywordOrSkill(filterJobs(kitalulusJobs), keywords, techStack)
 	deallsFinal := filterByKeywordOrSkill(filterJobs(deallsJobs), keywords, techStack)
-	sortJobsByRelevance(kalibrrFinal)
+	fmt.Fprintf(os.Stderr, "job-alert: matched kitalulus=%d dealls=%d\n", len(kitalulusFinal), len(deallsFinal))
 	sortJobsByRelevance(kitalulusFinal)
 	sortJobsByRelevance(deallsFinal)
-	kalibrrFinal = limitJobs(kalibrrFinal, jobsPerSource)
 	kitalulusFinal = limitJobs(kitalulusFinal, jobsPerSource)
 	deallsFinal = limitJobs(deallsFinal, jobsPerSource)
+	if *halalFlag {
+		assessHalalCompanies(client, kitalulusFinal, deallsFinal)
+	}
 
 	greeting := "Selamat pagi! ☀️ Berikut update lowongan kerja terbaru hari ini:"
 	if *keywordsFlag != "" {
 		greeting = "Berikut hasil pencarian lowongan kerja:"
 	}
-	message := formatMessage(greeting, kalibrrFinal, kitalulusFinal, deallsFinal)
+	message := formatMessage(greeting, kitalulusFinal, deallsFinal)
 	if *dryRun {
 		fmt.Println(message)
 		return
@@ -149,7 +150,6 @@ var (
 	kitalulusTitleRe = regexp.MustCompile(`<h3[^>]*>(.*?)</h3>`)
 	kitalulusPRe     = regexp.MustCompile(`<p[^>]*>(.*?)</p>`)
 	htmlTagRe        = regexp.MustCompile(`<[^>]*>`)
-	liRe             = regexp.MustCompile(`<li[^>]*>(.*?)</li>`)
 )
 
 func fetchHTML(client *http.Client, url string) (string, error) {
@@ -190,107 +190,12 @@ func decodeHTML(s string) string {
 	return strings.TrimSpace(s)
 }
 
-func extractListItems(s string) string {
-	items := liRe.FindAllStringSubmatch(s, -1)
-	parts := make([]string, 0, len(items))
-	for _, m := range items {
-		if txt := decodeHTML(stripTags(m[1])); txt != "" {
-			parts = append(parts, txt)
-		}
+func buildSearchURL(base, parameter string, keywords []string) string {
+	query := strings.Join(keywords, " ")
+	if query == "" {
+		return base
 	}
-	return strings.Join(parts, ", ")
-}
-
-// --- Kalibrr Fetcher ---
-// Kalibrr is Next.js SSR; jobs are embedded in __NEXT_DATA__ JSON.
-
-type kalibrrJob struct {
-	ID          int    `json:"id"`
-	Name        string `json:"name"`
-	CompanyName string `json:"companyName"`
-	Company     struct {
-		Code string `json:"code"`
-	} `json:"company"`
-	Slug           string `json:"slug"`
-	Function       string `json:"function"`
-	CreatedAt      string `json:"createdAt"`
-	BaseSalary     *int   `json:"baseSalary"`
-	MaximumSalary  *int   `json:"maximumSalary"`
-	SalaryCurrency string `json:"salaryCurrency"`
-	GoogleLocation struct {
-		AddressComponents struct {
-			City   string `json:"city"`
-			Region string `json:"region"`
-		} `json:"addressComponents"`
-	} `json:"googleLocation"`
-	Qualifications string `json:"qualifications"`
-}
-
-type kalibrrNextData struct {
-	Props struct {
-		PageProps struct {
-			Jobs []kalibrrJob `json:"jobs"`
-		} `json:"pageProps"`
-	} `json:"props"`
-}
-
-func fetchKalibrrJobs(client *http.Client, searchKeywords []string) []Job {
-	var all []Job
-	query := strings.Join(searchKeywords, " ")
-	for page := 1; page <= maxPages; page++ {
-		searchURL := kalibrrURL
-		if query != "" {
-			searchURL += "?query=" + url.QueryEscape(query)
-			if page > 1 {
-				searchURL += fmt.Sprintf("&page=%d", page)
-			}
-		} else if page > 1 {
-			searchURL += fmt.Sprintf("?page=%d", page)
-		}
-		html, err := fetchHTML(client, searchURL)
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "job-alert: kalibrr fetch: %v\n", err)
-			break
-		}
-		jobs := parseKalibrrHTML(html)
-		if len(jobs) == 0 {
-			break
-		}
-		all = append(all, jobs...)
-	}
-	return all
-}
-
-func parseKalibrrHTML(html string) []Job {
-	m := nextDataRe.FindStringSubmatch(html)
-	if len(m) < 2 {
-		return nil
-	}
-	var data kalibrrNextData
-	if err := json.Unmarshal([]byte(m[1]), &data); err != nil {
-		fmt.Fprintf(os.Stderr, "job-alert: kalibrr parse: %v\n", err)
-		return nil
-	}
-	jobs := make([]Job, 0, len(data.Props.PageProps.Jobs))
-	for _, j := range data.Props.PageProps.Jobs {
-		loc := strings.TrimSpace(j.GoogleLocation.AddressComponents.City)
-		if r := strings.TrimSpace(j.GoogleLocation.AddressComponents.Region); r != "" && r != loc {
-			loc += ", " + r
-		}
-		u := fmt.Sprintf("https://www.kalibrr.com/id-ID/c/%s/jobs/%d/%s", j.Company.Code, j.ID, j.Slug)
-		jobs = append(jobs, Job{
-			Title:    j.Name,
-			Company:  j.CompanyName,
-			Location: loc,
-			URL:      u,
-			Source:   "kalibrr",
-			Salary:   formatSalaryRange(derefInt(j.BaseSalary), derefInt(j.MaximumSalary)),
-			Type:     j.Function,
-			Skills:   extractListItems(j.Qualifications),
-			PostedAt: j.CreatedAt,
-		})
-	}
-	return jobs
+	return base + "?" + url.Values{parameter: []string{query}}.Encode()
 }
 
 // --- Kitalulus Fetcher ---
@@ -307,8 +212,8 @@ func fetchKitalulusJobs(client *http.Client, searchKeywords []string) []Job {
 		wg.Add(1)
 		go func(keyword string) {
 			defer wg.Done()
-			url := fmt.Sprintf("%s?q=%s", kitalulusURL, url.QueryEscape(keyword))
-			html, err := fetchHTML(client, url)
+			searchURL := buildSearchURL(kitalulusURL, "keyword", []string{keyword})
+			html, err := fetchHTML(client, searchURL)
 			if err != nil {
 				fmt.Fprintf(os.Stderr, "job-alert: kitalulus fetch (%s): %v\n", keyword, err)
 				return
@@ -336,22 +241,21 @@ func parseKitalulusHTML(html string) []Job {
 		if tm := kitalulusTitleRe.FindStringSubmatch(card); len(tm) > 1 {
 			title = decodeHTML(stripTags(tm[1]))
 		}
-		company := ""
-		location := ""
-		firstP := true
+		var details []string
 		for _, pm := range kitalulusPRe.FindAllStringSubmatch(card, -1) {
 			txt := decodeHTML(stripTags(pm[1]))
 			if txt == "" || txt == "Dipromosikan" {
 				continue
 			}
-			if isLocation(txt) {
-				location = txt
-				continue
-			}
-			if firstP {
-				company = strings.TrimSpace(strings.SplitN(txt, " - ", 2)[0])
-				firstP = false
-			}
+			details = append(details, txt)
+		}
+		company := ""
+		location := ""
+		if len(details) > 0 {
+			company = strings.TrimSpace(strings.SplitN(details[0], " - ", 2)[0])
+		}
+		if len(details) > 1 {
+			location = details[1]
 		}
 		jobs = append(jobs, Job{
 			Title:    title,
@@ -362,16 +266,6 @@ func parseKitalulusHTML(html string) []Job {
 		})
 	}
 	return jobs
-}
-
-func isLocation(s string) bool {
-	lower := strings.ToLower(s)
-	for _, loc := range targetLocations {
-		if strings.Contains(lower, loc) {
-			return true
-		}
-	}
-	return false
 }
 
 // --- Dealls Fetcher ---
@@ -418,8 +312,9 @@ type deallsNextData struct {
 	} `json:"props"`
 }
 
-func fetchDeallsJobs(client *http.Client) []Job {
-	html, err := fetchHTML(client, deallsURL)
+func fetchDeallsJobs(client *http.Client, searchKeywords []string) []Job {
+	searchURL := buildSearchURL(deallsURL, "search", searchKeywords)
+	html, err := fetchHTML(client, searchURL)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "job-alert: dealls fetch: %v\n", err)
 		return nil
@@ -477,20 +372,6 @@ func formatDeallsSalary(r *struct {
 		return fmt.Sprintf("Rp %s jt", formatMillions(r.Start))
 	}
 	return fmt.Sprintf("Rp %s - %s jt", formatMillions(r.Start), formatMillions(r.End))
-}
-
-func formatSalaryRange(min, max int) string {
-	if min == 0 && max == 0 {
-		return ""
-	}
-	if min != 0 && max != 0 && min != max {
-		return fmt.Sprintf("Rp %s - %s jt", formatMillions(min), formatMillions(max))
-	}
-	v := min
-	if v == 0 {
-		v = max
-	}
-	return fmt.Sprintf("Rp %s jt", formatMillions(v))
 }
 
 func formatMillions(amount int) string {
@@ -560,35 +441,38 @@ func limitJobs(jobs []Job, limit int) []Job {
 func filterByKeywordOrSkill(jobs []Job, searchKeywords, stack []string) []Job {
 	var out []Job
 	for _, j := range jobs {
-		text := strings.ToLower(j.Title + " " + j.Skills + " " + j.Company)
-		matched := false
-		for _, kw := range searchKeywords {
-			for _, word := range strings.Fields(kw) {
-				if len(word) > 2 && strings.Contains(text, strings.ToLower(word)) {
-					matched = true
-					break
-				}
-			}
-			if matched {
-				break
-			}
+		title := strings.ToLower(j.Title)
+
+		// A supplied position must match the job title, not company or skills.
+		if len(searchKeywords) > 0 && !matchesAnyTerm(title, searchKeywords) {
+			continue
 		}
-		if !matched && len(stack) > 0 {
-			for _, skill := range stack {
-				if len(skill) >= 3 && strings.Contains(text, strings.ToLower(skill)) {
-					matched = true
-					break
-				}
-			}
+		// Some sources do not expose skills. Do not turn missing source data into
+		// a negative match; when skills are available, require one requested skill.
+		if len(stack) > 0 && strings.TrimSpace(j.Skills) != "" && !matchesAnyTerm(strings.ToLower(j.Skills), stack) {
+			continue
 		}
-		if matched {
-			out = append(out, j)
-		}
+		out = append(out, j)
 	}
 	return out
 }
 
-// --- AI Filtering (unused compatibility types) ---
+func matchesAnyTerm(text string, terms []string) bool {
+	for _, term := range terms {
+		term = strings.ToLower(strings.TrimSpace(term))
+		if term != "" && strings.Contains(text, term) {
+			return true
+		}
+		for _, word := range strings.Fields(term) {
+			if len(word) > 2 && strings.Contains(text, word) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// --- AI Company Assessment ---
 
 // Sumopod exposes the OpenAI Responses API (not chat completions).
 // Request: {model, instructions, input}; response: output[].content[].text.
@@ -607,64 +491,130 @@ type responsesResponse struct {
 	} `json:"output"`
 }
 
-func aiFilterJobs(client *http.Client, jobs []Job, stack []string) []Job {
-	if len(jobs) == 0 {
-		return nil
+const (
+	halalStatusHalal       = "halal"
+	halalStatusNotHalal    = "tidak_halal"
+	halalStatusNeedsReview = "perlu_riset"
+)
+
+type companyAssessmentInput struct {
+	Company string   `json:"company"`
+	Roles   []string `json:"roles"`
+}
+
+type companyAssessment struct {
+	Company string `json:"company"`
+	Status  string `json:"status"`
+	Reason  string `json:"reason"`
+}
+
+func assessHalalCompanies(client *http.Client, groups ...[]Job) {
+	companies := make([]companyAssessmentInput, 0)
+	companyIndex := make(map[string]int)
+	for _, jobs := range groups {
+		for i := range jobs {
+			jobs[i].HalalStatus = halalStatusNeedsReview
+			key := normalizeCompany(jobs[i].Company)
+			if key == "" {
+				continue
+			}
+			index, exists := companyIndex[key]
+			if !exists {
+				index = len(companies)
+				companyIndex[key] = index
+				companies = append(companies, companyAssessmentInput{Company: jobs[i].Company})
+			}
+			companies[index].Roles = append(companies[index].Roles, jobs[i].Title)
+		}
+	}
+	if len(companies) == 0 {
+		return
 	}
 
-	jobsJSON, _ := json.Marshal(jobs)
-
-	instructions := fmt.Sprintf(`Kamu filter lowongan kerja. Dari JSON di bawah, return HANYA array JSON job yang match kriteria:
-
-TECH STACK (minimal 1 match):
-%s
-
-PENGALAMAN KERJA: 1-3 tahun (toleransi jika tidak disebutkan atau <=3).
-
-Rules:
-- Return HANYA JSON array, tanpa teks lain, tanpa markdown.
-- Jangan ubah struktur object job, kembalikan object aslinya persis.
-- Kalau tidak ada yang match, return [].
-- Maksimal 30 job.`, strings.Join(stack, ", "))
-
-	req := responsesRequest{
-		Model:        "deepseek-v4-flash",
-		Instructions: instructions,
-		Input:        string(jobsJSON),
+	apiKey := os.Getenv("SUMOPOD_API_KEY")
+	if apiKey == "" {
+		fmt.Fprintln(os.Stderr, "job-alert: halal assessment skipped: SUMOPOD_API_KEY not set")
+		return
 	}
-
-	body, err := json.Marshal(req)
+	input, err := json.Marshal(companies)
 	if err != nil {
-		return jobs
+		return
 	}
+	request := responsesRequest{
+		Model: "deepseek-v4-flash",
+		Instructions: `Nilai model bisnis setiap perusahaan berdasarkan informasi publik yang benar-benar kamu ketahui.
 
-	httpReq, err := http.NewRequest(http.MethodPost, sumopodURL, bytes.NewReader(body))
+Kriteria halal:
+1. Bukan produsen atau penjual utama barang/jasa yang haram.
+2. Model bisnis utama tidak berkaitan dengan riba.
+3. Bukan bank, asuransi, perusahaan pinjaman online, atau bisnis pembiayaan berbunga.
+
+Return HANYA array JSON dengan satu object per perusahaan: {"company":"nama asli","status":"halal|tidak_halal|perlu_riset","reason":"alasan singkat"}.
+- Gunakan halal hanya jika model bisnis utamanya jelas memenuhi ketiga kriteria.
+- Gunakan tidak_halal jika jelas melanggar, dan sebutkan alasan spesifik seperti Bank, Asuransi, Pinjaman online, Riba, atau Barang haram.
+- Gunakan perlu_riset jika informasi tidak cukup atau identitas perusahaan ambigu. Jangan menebak.
+- Jangan berikan fatwa, markdown, atau teks di luar JSON.`,
+		Input: string(input),
+	}
+	body, err := json.Marshal(request)
 	if err != nil {
-		return jobs
+		return
+	}
+	responsesURL := os.Getenv("SUMOPOD_RESPONSES_URL")
+	if responsesURL == "" {
+		responsesURL = sumopodURL
+	}
+	httpReq, err := http.NewRequest(http.MethodPost, responsesURL, bytes.NewReader(body))
+	if err != nil {
+		return
 	}
 	httpReq.Header.Set("Content-Type", "application/json")
-	httpReq.Header.Set("Authorization", "Bearer "+os.Getenv("SUMOPOD_API_KEY"))
-
-	resp, err := client.Do(httpReq)
+	httpReq.Header.Set("Authorization", "Bearer "+apiKey)
+	assessmentClient := *client
+	assessmentClient.Timeout = 120 * time.Second
+	resp, err := assessmentClient.Do(httpReq)
 	if err != nil {
-		return jobs
+		fmt.Fprintf(os.Stderr, "job-alert: halal assessment failed: %v\n", err)
+		return
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
-		return jobs
+		fmt.Fprintf(os.Stderr, "job-alert: halal assessment returned status %d\n", resp.StatusCode)
+		return
 	}
+	var response responsesResponse
+	if err := json.NewDecoder(resp.Body).Decode(&response); err != nil {
+		fmt.Fprintf(os.Stderr, "job-alert: halal assessment response: %v\n", err)
+		return
+	}
+	var assessments []companyAssessment
+	if err := json.Unmarshal([]byte(cleanJSONResponse(extractResponsesText(response))), &assessments); err != nil {
+		fmt.Fprintf(os.Stderr, "job-alert: halal assessment parse: %v\n", err)
+		return
+	}
+	applyCompanyAssessments(groups, assessments)
+}
 
-	var rresp responsesResponse
-	if err := json.NewDecoder(resp.Body).Decode(&rresp); err != nil {
-		return jobs
+func applyCompanyAssessments(groups [][]Job, assessments []companyAssessment) {
+	byCompany := make(map[string]companyAssessment, len(assessments))
+	for _, assessment := range assessments {
+		if assessment.Status != halalStatusHalal && assessment.Status != halalStatusNotHalal && assessment.Status != halalStatusNeedsReview {
+			continue
+		}
+		byCompany[normalizeCompany(assessment.Company)] = assessment
 	}
+	for _, jobs := range groups {
+		for i := range jobs {
+			if assessment, ok := byCompany[normalizeCompany(jobs[i].Company)]; ok {
+				jobs[i].HalalStatus = assessment.Status
+				jobs[i].HalalReason = strings.Join(strings.Fields(assessment.Reason), " ")
+			}
+		}
+	}
+}
 
-	content := cleanJSONResponse(extractResponsesText(rresp))
-	var filtered []Job
-	if err := json.Unmarshal([]byte(content), &filtered); err != nil || len(filtered) == 0 {
-		return jobs
-	}
-	return filtered
+func normalizeCompany(company string) string {
+	return strings.ToLower(strings.TrimSpace(company))
 }
 
 func extractResponsesText(r responsesResponse) string {
@@ -693,15 +643,14 @@ func cleanJSONResponse(s string) string {
 
 // --- Message Formatter ---
 
-func formatMessage(greeting string, kalibrrJobs, kitalulusJobs, deallsJobs []Job) string {
+func formatMessage(greeting string, kitalulusJobs, deallsJobs []Job) string {
 	var b strings.Builder
 
 	b.WriteString(greeting)
 	b.WriteString("\n\nDaftar Job Terbaru:\n\n")
 
-	writeSection(&b, "A. Kalibrr", kalibrrJobs)
-	writeSection(&b, "B. Kitalulus", kitalulusJobs)
-	writeSection(&b, "C. Dealls", deallsJobs)
+	writeSection(&b, "A. Kitalulus", kitalulusJobs)
+	writeSection(&b, "B. Dealls", deallsJobs)
 
 	b.WriteString("\n— Dikirim otomatis oleh Job Alert Bot")
 
@@ -724,7 +673,7 @@ func writeSection(b *strings.Builder, header string, jobs []Job) {
 func writeJobEntry(b *strings.Builder, num int, j Job) {
 	b.WriteString(fmt.Sprintf("%d. **%s**\n", num, j.Title))
 	if j.Company != "" {
-		b.WriteString(fmt.Sprintf("   🏢 %s\n", j.Company))
+		b.WriteString(fmt.Sprintf("   🏢 %s%s\n", j.Company, halalLabel(j)))
 	}
 	if j.Location != "" {
 		b.WriteString(fmt.Sprintf("   📍 %s\n", j.Location))
@@ -744,6 +693,22 @@ func writeJobEntry(b *strings.Builder, num int, j Job) {
 	b.WriteString(fmt.Sprintf("   🔗 %s\n\n", j.URL))
 }
 
+func halalLabel(job Job) string {
+	switch job.HalalStatus {
+	case halalStatusHalal:
+		return " (Halal)"
+	case halalStatusNotHalal:
+		if job.HalalReason != "" {
+			return " (Tidak Halal — " + job.HalalReason + ")"
+		}
+		return " (Tidak Halal)"
+	case halalStatusNeedsReview:
+		return " (Perlu Riset)"
+	default:
+		return ""
+	}
+}
+
 // --- Telegram Sender ---
 
 func sendTelegram(client *http.Client, message string) {
@@ -751,51 +716,55 @@ func sendTelegram(client *http.Client, message string) {
 	chatID := os.Getenv("TELEGRAM_USER_ID")
 
 	if botToken == "" || chatID == "" {
-		fmt.Fprintln(os.Stderr, "job-alert: TELEGRAM_BOT_TOKEN or TELEGRAM_USER_ID not set, printing to stdout")
+		fmt.Fprintln(os.Stderr, "job-alert: Telegram credentials missing, printing to stdout")
 		fmt.Println(message)
 		return
 	}
 
 	url := fmt.Sprintf("%s/bot%s/sendMessage", telegramAPIURL, botToken)
+	for _, chunk := range splitTelegramMessage(message, 4000) {
+		payload := map[string]string{
+			"chat_id":                  chatID,
+			"text":                     chunk,
+			"parse_mode":               "Markdown",
+			"disable_web_page_preview": "true",
+		}
+		body, _ := json.Marshal(payload)
+		req, _ := http.NewRequest(http.MethodPost, url, bytes.NewReader(body))
+		req.Header.Set("Content-Type", "application/json")
 
-	text := message
-	if len(message) > 4000 {
-		text = message[:4000] + "\n\n— (dipotong karena terlalu panjang)"
-	}
-
-	payload := map[string]string{
-		"chat_id":                  chatID,
-		"text":                     text,
-		"parse_mode":               "Markdown",
-		"disable_web_page_preview": "true",
-	}
-
-	body, _ := json.Marshal(payload)
-	req, _ := http.NewRequest(http.MethodPost, url, bytes.NewReader(body))
-	req.Header.Set("Content-Type", "application/json")
-
-	resp, err := client.Do(req)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "job-alert: failed to send telegram message: %v\n", err)
-		fmt.Println(message)
-		return
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
+		resp, err := client.Do(req)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "job-alert: Telegram send failed: %v\n", err)
+			return
+		}
 		respBody, _ := io.ReadAll(resp.Body)
-		fmt.Fprintf(os.Stderr, "job-alert: telegram API error (%d): %s\n", resp.StatusCode, string(respBody))
-		fmt.Println(message)
-		return
+		resp.Body.Close()
+		if resp.StatusCode != http.StatusOK {
+			fmt.Fprintf(os.Stderr, "job-alert: Telegram API error (%d): %s\n", resp.StatusCode, string(respBody))
+			return
+		}
 	}
 	fmt.Fprintln(os.Stderr, "job-alert: message sent to Telegram")
 }
 
-func derefInt(p *int) int {
-	if p == nil {
-		return 0
+func splitTelegramMessage(message string, max int) []string {
+	var chunks []string
+	for len(message) > max {
+		cut := strings.LastIndex(message[:max], "\n\n")
+		if cut < max/2 {
+			cut = strings.LastIndex(message[:max], "\n")
+		}
+		if cut < 1 {
+			cut = max
+		}
+		chunks = append(chunks, message[:cut])
+		message = message[cut:]
 	}
-	return *p
+	if message != "" {
+		chunks = append(chunks, message)
+	}
+	return chunks
 }
 
 // sortJobsByRelevance sorts by number of matching tech stack skills (ponytail: O(n*s), fine for n≤100).

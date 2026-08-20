@@ -32,6 +32,11 @@ if [ -n "$CLEAN_BOT_TOKEN" ]; then
   chmod 600 /root/.picoclaw/.security.yml
 fi
 
+# Keep the managed job-search instructions current even when the workspace is
+# restored from an older persistent volume.
+mkdir -p /root/.picoclaw/workspace/skills/job-search
+cp /seed/workspace/skills/job-search/SKILL.md /root/.picoclaw/workspace/skills/job-search/SKILL.md
+
 # Start loker-bot for daily job alert at 3 AM
 loker-bot.sh &
 

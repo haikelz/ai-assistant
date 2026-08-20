@@ -7,19 +7,26 @@ KEYWORDS=""
 SKILLS=""
 EXPERIENCE=""
 LOCATION=""
+HALAL=""
 
 if echo "$INPUT" | grep -q '|'; then
 	KEYWORDS=$(echo "$INPUT" | cut -d'|' -f1 | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
 	SKILLS=$(echo "$INPUT" | cut -d'|' -f2 | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
 	EXPERIENCE=$(echo "$INPUT" | cut -d'|' -f3 | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
 	LOCATION=$(echo "$INPUT" | cut -d'|' -f4 | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
+	HALAL=$(echo "$INPUT" | cut -d'|' -f5 | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
 else
 	KEYWORDS="$INPUT"
 fi
 
-
-exec /usr/local/bin/job-alert \
+set -- /usr/local/bin/job-alert \
 	--keywords "$KEYWORDS" \
 	--skills "$SKILLS" \
 	--experience "$EXPERIENCE" \
 	--location "$LOCATION"
+
+if [ "$(printf '%s' "$HALAL" | tr '[:upper:]' '[:lower:]')" = "halal" ]; then
+	set -- "$@" --halal
+fi
+
+exec "$@"
