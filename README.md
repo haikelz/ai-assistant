@@ -1,22 +1,46 @@
 # AI Assistant
 
-PicoClaw Telegram assistant using Sumopod's Responses API with `deepseek-v4-flash`, plus two local Go services: a finance API and a job-alert module that scrapes Kitalulus and Dealls.
+PicoClaw Telegram assistant with configurable Sumopod, Google Gemini, or OpenAI models, plus two local Go services: a finance API and a job-alert module that scrapes Kitalulus and Dealls.
 
 ## Setup
 
-Set `.env` from `.env.example`. For the one-time migration from SealedSecret, first push these manifest changes and sync the Argo CD application so the old SealedSecret is pruned. Then create the Kubernetes Secret:
+Copy `.env.example` to `.env`, configure the AI provider and model, then create the Kubernetes Secret:
 
 ```sh
 ./k8s/apply-secret.sh
 ```
 
-The script applies `Secret/ai-assistant-env` directly from `.env`; neither `.env` nor a secret manifest is committed to Git. For later secret updates, run the script again and restart or sync the application.
+The script applies `Secret/ai-assistant-env` directly from `.env`; neither `.env` nor a generated secret manifest is committed to Git. For later configuration updates, run the script again and restart the deployment.
 
-Required secrets:
+Required variables:
 
-- `SUMOPOD_API_KEY`
+- `AI_PROVIDER`: `sumopod`, `google`, or `openai`
+- `AI_MODEL`: the provider's model ID
+- The matching API key: `SUMOPOD_API_KEY`, `GOOGLE_API_KEY`, or `OPENAI_API_KEY`
 - `TELEGRAM_BOT_TOKEN`
 - `TELEGRAM_USER_ID` from Telegram's numeric user ID
+
+Examples:
+
+```dotenv
+AI_PROVIDER=sumopod
+AI_MODEL=your-sumopod-model
+SUMOPOD_API_KEY=...
+
+# Or Google Gemini:
+# AI_PROVIDER=google
+# AI_MODEL=gemini-2.5-flash
+# GOOGLE_API_KEY=...
+
+# Or OpenAI:
+# AI_PROVIDER=openai
+# AI_MODEL=gpt-5-mini
+# OPENAI_API_KEY=...
+```
+
+`AI_MODEL` configures both PicoClaw and halal company assessment. At startup, the container regenerates PicoClaw's model config from these variables, replacing stale provider/model settings from the PVC. The existing Sumopod Responses API proxy path remains unchanged.
+
+For `AI_PROVIDER=sumopod`, models containing `gpt` continue through Sumopod's Responses API, but the local proxy removes PicoClaw's unsupported `temperature` field. If Sumopod returns Responses events as an SSE stream, the proxy converts its final `response.completed` event into the JSON response PicoClaw expects. DeepSeek and other Sumopod models retain the original request payload.
 
 ## Google Spreadsheet finance sync
 
@@ -39,10 +63,13 @@ Every new finance record can be written to the matching Indonesian month tab in 
    GOOGLE_SERVICE_ACCOUNT_JSON_BASE64=paste-the-base64-output-here
    ```
 
-6. Apply the updated Secret, rebuild and push the image, then sync the Argo CD application:
+6. Apply the updated Secret, rebuild and push the image, then restart the Kubernetes deployment:
 
    ```sh
    ./k8s/apply-secret.sh
+   kubectl apply -k k8s
+   kubectl rollout restart deployment/ai-assistant -n default
+   kubectl rollout status deployment/ai-assistant -n default
    ```
 
 The spreadsheet must contain tabs named `Januari` through `Desember` for the months you use. Leave both Google variables empty to keep local SQLite-only finance records.
@@ -80,7 +107,7 @@ Every result remains visible and receives one label: `Halal`, `Tidak Halal — <
 
 ### Daily cron
 
-Runs automatically at 03:00 Asia/Jakarta via `loker-bot.sh` with default keywords:
+Runs automatically at 03:00 Asia/Jakarta via `loker-bot.sh` with halal labeling enabled and these default keywords:
 
 `fullstack developer`, `fullstack engineer`, `devops engineer`, `frontend developer`, `backend developer`, `frontend engineer`, `backend engineer`, `product developer`, `product engineer`.
 
@@ -98,7 +125,7 @@ Dealls exposes structured job data in its server-rendered Next.js pages. Kitalul
 1. **Location** — substring match against Jabodetabek, Bandung, Surabaya, Bali, Batam, Solo, Salatiga, Karawang, Cikampek, Cikarang.
 2. **Experience** — `maxYearsExp` bound (default 3 years); jobs with `minYearsOfExperience > 3` are dropped.
 3. **Position and tech stack** — deterministic text matching against titles and available skill metadata. Listings without skill metadata are retained when their title matches.
-4. **Optional company assessment** — when `halal` is specified, Sumopod classifies unique companies after job filtering. This is an informational AI assessment, not a religious ruling.
+4. **Optional company assessment** — when `halal` is specified, the configured AI provider classifies unique companies after job filtering. The daily cron enables this automatically. This is an informational AI assessment, not a religious ruling.
 
 Max 20 results per source.
 

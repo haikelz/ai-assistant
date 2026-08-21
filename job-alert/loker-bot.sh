@@ -13,7 +13,7 @@ while true; do
 
   if [ "$NOW_HOUR" = "03" ] && [ "$LAST_DAILY" != "$NOW_DATE" ]; then
     echo "loker-bot: running daily job alert" >&2
-    /usr/local/bin/job-alert &
+    /usr/local/bin/job-alert --halal &
     echo "$NOW_DATE" > "$STATE_FILE"
     LAST_DAILY="$NOW_DATE"
   fi

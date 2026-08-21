@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -83,10 +84,17 @@ func TestApplyCompanyAssessments(t *testing.T) {
 	}
 }
 
-func TestAssessHalalCompanies(t *testing.T) {
+func TestAssessHalalCompaniesWithSumopod(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if got := r.Header.Get("Authorization"); got != "Bearer test-key" {
 			t.Errorf("Authorization = %q", got)
+		}
+		var request responsesRequest
+		if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+			t.Fatal(err)
+		}
+		if request.Model != "test-model" {
+			t.Errorf("model = %q", request.Model)
 		}
 		w.Header().Set("Content-Type", "application/json")
 		fmt.Fprint(w, `{"output":[{"content":[{"text":"[{\"company\":\"Company A\",\"status\":\"halal\",\"reason\":\"Bisnis perangkat lunak\"}]"}]}]}`)
@@ -94,10 +102,94 @@ func TestAssessHalalCompanies(t *testing.T) {
 	defer server.Close()
 	t.Setenv("SUMOPOD_API_KEY", "test-key")
 	t.Setenv("SUMOPOD_RESPONSES_URL", server.URL)
+	t.Setenv("AI_PROVIDER", "sumopod")
+	t.Setenv("AI_MODEL", "test-model")
 
 	jobs := []Job{{Company: "Company A", Title: "Software Engineer"}}
 	assessHalalCompanies(server.Client(), jobs)
 	if jobs[0].HalalStatus != halalStatusHalal || jobs[0].HalalReason != "Bisnis perangkat lunak" {
+		t.Fatalf("assessment = %#v", jobs[0])
+	}
+}
+
+func TestAssessHalalCompaniesWithSumopodGPTEventStream(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/event-stream")
+		fmt.Fprintln(w, `data: {"type":"response.created","response":{"status":"in_progress"}}`)
+		fmt.Fprintln(w)
+		fmt.Fprintln(w, `data: {"type":"response.completed","response":{"output":[{"content":[{"text":"[{\"company\":\"Company A\",\"status\":\"halal\",\"reason\":\"Teknologi\"}]"}]}]}}`)
+		fmt.Fprintln(w)
+	}))
+	defer server.Close()
+	t.Setenv("SUMOPOD_API_KEY", "test-key")
+	t.Setenv("SUMOPOD_RESPONSES_URL", server.URL)
+	t.Setenv("AI_PROVIDER", "sumopod")
+	t.Setenv("AI_MODEL", "gpt-5.6-luna")
+
+	jobs := []Job{{Company: "Company A", Title: "Software Engineer"}}
+	assessHalalCompanies(server.Client(), jobs)
+	if jobs[0].HalalStatus != halalStatusHalal || jobs[0].HalalReason != "Teknologi" {
+		t.Fatalf("assessment = %#v", jobs[0])
+	}
+}
+
+func TestAssessHalalCompaniesWithOpenAI(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if got := r.Header.Get("Authorization"); got != "Bearer openai-key" {
+			t.Errorf("Authorization = %q", got)
+		}
+		var request responsesRequest
+		if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+			t.Fatal(err)
+		}
+		if request.Model != "openai-model" {
+			t.Errorf("model = %q", request.Model)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprint(w, `{"output":[{"content":[{"text":"[{\"company\":\"Company A\",\"status\":\"halal\",\"reason\":\"Teknologi\"}]"}]}]}`)
+	}))
+	defer server.Close()
+	t.Setenv("AI_PROVIDER", "openai")
+	t.Setenv("AI_MODEL", "openai-model")
+	t.Setenv("OPENAI_API_KEY", "openai-key")
+	t.Setenv("OPENAI_RESPONSES_URL", server.URL)
+
+	jobs := []Job{{Company: "Company A", Title: "Engineer"}}
+	assessHalalCompanies(server.Client(), jobs)
+	if jobs[0].HalalStatus != halalStatusHalal {
+		t.Fatalf("assessment = %#v", jobs[0])
+	}
+}
+
+func TestAssessHalalCompaniesWithGoogle(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/models/gemini-test:generateContent" {
+			t.Errorf("path = %q", r.URL.Path)
+		}
+		if got := r.Header.Get("X-Goog-Api-Key"); got != "google-key" {
+			t.Errorf("X-Goog-Api-Key = %q", got)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprint(w, `{"candidates":[{"content":{"parts":[{"text":"[{\"company\":\"Company A\",\"status\":\"tidak_halal\",\"reason\":\"Bank\"}]"}]}}]}`)
+	}))
+	defer server.Close()
+	t.Setenv("AI_PROVIDER", "google")
+	t.Setenv("AI_MODEL", "gemini-test")
+	t.Setenv("GOOGLE_API_KEY", "google-key")
+	t.Setenv("GOOGLE_GENERATIVE_URL", server.URL)
+
+	jobs := []Job{{Company: "Company A", Title: "Engineer"}}
+	assessHalalCompanies(server.Client(), jobs)
+	if jobs[0].HalalStatus != halalStatusNotHalal || jobs[0].HalalReason != "Bank" {
+		t.Fatalf("assessment = %#v", jobs[0])
+	}
+}
+
+func TestAssessHalalCompaniesWithoutModelNeedsReview(t *testing.T) {
+	t.Setenv("AI_MODEL", "")
+	jobs := []Job{{Company: "Company A", Title: "Engineer"}}
+	assessHalalCompanies(http.DefaultClient, jobs)
+	if jobs[0].HalalStatus != halalStatusNeedsReview {
 		t.Fatalf("assessment = %#v", jobs[0])
 	}
 }

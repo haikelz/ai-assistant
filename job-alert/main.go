@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bufio"
 	"bytes"
 	"encoding/json"
 	"flag"
@@ -17,12 +18,14 @@ import (
 )
 
 const (
-	kitalulusURL   = "https://kitalulus.com/lowongan"
-	deallsURL      = "https://dealls.com/loker"
-	sumopodURL     = "https://ai.sumopod.com/v1/responses"
-	telegramAPIURL = "https://api.telegram.org"
-	requestTimeout = 30 * time.Second
-	jobsPerSource  = 20
+	kitalulusURL        = "https://kitalulus.com/lowongan"
+	deallsURL           = "https://dealls.com/loker"
+	sumopodURL          = "https://ai.sumopod.com/v1/responses"
+	openAIResponsesURL  = "https://api.openai.com/v1/responses"
+	googleGenerativeURL = "https://generativelanguage.googleapis.com/v1beta"
+	telegramAPIURL      = "https://api.telegram.org"
+	requestTimeout      = 30 * time.Second
+	jobsPerSource       = 20
 )
 
 var keywords = []string{
@@ -474,7 +477,7 @@ func matchesAnyTerm(text string, terms []string) bool {
 
 // --- AI Company Assessment ---
 
-// Sumopod exposes the OpenAI Responses API (not chat completions).
+// Sumopod and OpenAI expose the Responses API (not chat completions).
 // Request: {model, instructions, input}; response: output[].content[].text.
 
 type responsesRequest struct {
@@ -489,6 +492,26 @@ type responsesResponse struct {
 			Text string `json:"text"`
 		} `json:"content"`
 	} `json:"output"`
+}
+
+type geminiRequest struct {
+	SystemInstruction geminiContent   `json:"system_instruction"`
+	Contents          []geminiContent `json:"contents"`
+}
+
+type geminiContent struct {
+	Role  string       `json:"role,omitempty"`
+	Parts []geminiPart `json:"parts"`
+}
+
+type geminiPart struct {
+	Text string `json:"text"`
+}
+
+type geminiResponse struct {
+	Candidates []struct {
+		Content geminiContent `json:"content"`
+	} `json:"candidates"`
 }
 
 const (
@@ -507,6 +530,19 @@ type companyAssessment struct {
 	Status  string `json:"status"`
 	Reason  string `json:"reason"`
 }
+
+const halalAssessmentInstructions = `Nilai model bisnis setiap perusahaan berdasarkan informasi publik yang benar-benar kamu ketahui.
+
+Kriteria halal:
+1. Bukan produsen atau penjual utama barang/jasa yang haram.
+2. Model bisnis utama tidak berkaitan dengan riba.
+3. Bukan bank, asuransi, perusahaan pinjaman online, atau bisnis pembiayaan berbunga.
+
+Return HANYA array JSON dengan satu object per perusahaan: {"company":"nama asli","status":"halal|tidak_halal|perlu_riset","reason":"alasan singkat"}.
+- Gunakan halal hanya jika model bisnis utamanya jelas memenuhi ketiga kriteria.
+- Gunakan tidak_halal jika jelas melanggar, dan sebutkan alasan spesifik seperti Bank, Asuransi, Pinjaman online, Riba, atau Barang haram.
+- Gunakan perlu_riset jika informasi tidak cukup atau identitas perusahaan ambigu. Jangan menebak.
+- Jangan berikan fatwa, markdown, atau teks di luar JSON.`
 
 func assessHalalCompanies(client *http.Client, groups ...[]Job) {
 	companies := make([]companyAssessmentInput, 0)
@@ -531,68 +567,153 @@ func assessHalalCompanies(client *http.Client, groups ...[]Job) {
 		return
 	}
 
-	apiKey := os.Getenv("SUMOPOD_API_KEY")
-	if apiKey == "" {
-		fmt.Fprintln(os.Stderr, "job-alert: halal assessment skipped: SUMOPOD_API_KEY not set")
+	model := strings.TrimSpace(os.Getenv("AI_MODEL"))
+	if model == "" {
+		fmt.Fprintln(os.Stderr, "job-alert: halal assessment skipped: AI_MODEL not set")
 		return
 	}
 	input, err := json.Marshal(companies)
 	if err != nil {
 		return
 	}
-	request := responsesRequest{
-		Model: "deepseek-v4-flash",
-		Instructions: `Nilai model bisnis setiap perusahaan berdasarkan informasi publik yang benar-benar kamu ketahui.
-
-Kriteria halal:
-1. Bukan produsen atau penjual utama barang/jasa yang haram.
-2. Model bisnis utama tidak berkaitan dengan riba.
-3. Bukan bank, asuransi, perusahaan pinjaman online, atau bisnis pembiayaan berbunga.
-
-Return HANYA array JSON dengan satu object per perusahaan: {"company":"nama asli","status":"halal|tidak_halal|perlu_riset","reason":"alasan singkat"}.
-- Gunakan halal hanya jika model bisnis utamanya jelas memenuhi ketiga kriteria.
-- Gunakan tidak_halal jika jelas melanggar, dan sebutkan alasan spesifik seperti Bank, Asuransi, Pinjaman online, Riba, atau Barang haram.
-- Gunakan perlu_riset jika informasi tidak cukup atau identitas perusahaan ambigu. Jangan menebak.
-- Jangan berikan fatwa, markdown, atau teks di luar JSON.`,
-		Input: string(input),
-	}
-	body, err := json.Marshal(request)
-	if err != nil {
-		return
-	}
-	responsesURL := os.Getenv("SUMOPOD_RESPONSES_URL")
-	if responsesURL == "" {
-		responsesURL = sumopodURL
-	}
-	httpReq, err := http.NewRequest(http.MethodPost, responsesURL, bytes.NewReader(body))
-	if err != nil {
-		return
-	}
-	httpReq.Header.Set("Content-Type", "application/json")
-	httpReq.Header.Set("Authorization", "Bearer "+apiKey)
 	assessmentClient := *client
 	assessmentClient.Timeout = 120 * time.Second
-	resp, err := assessmentClient.Do(httpReq)
+	provider := strings.ToLower(strings.TrimSpace(os.Getenv("AI_PROVIDER")))
+	if provider == "" {
+		provider = "sumopod"
+	}
+	responseText, err := requestHalalAssessment(&assessmentClient, provider, model, string(input))
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "job-alert: halal assessment failed: %v\n", err)
 		return
 	}
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		fmt.Fprintf(os.Stderr, "job-alert: halal assessment returned status %d\n", resp.StatusCode)
-		return
-	}
-	var response responsesResponse
-	if err := json.NewDecoder(resp.Body).Decode(&response); err != nil {
-		fmt.Fprintf(os.Stderr, "job-alert: halal assessment response: %v\n", err)
-		return
-	}
 	var assessments []companyAssessment
-	if err := json.Unmarshal([]byte(cleanJSONResponse(extractResponsesText(response))), &assessments); err != nil {
+	if err := json.Unmarshal([]byte(cleanJSONResponse(responseText)), &assessments); err != nil {
 		fmt.Fprintf(os.Stderr, "job-alert: halal assessment parse: %v\n", err)
 		return
 	}
 	applyCompanyAssessments(groups, assessments)
+}
+
+func requestHalalAssessment(client *http.Client, provider, model, input string) (string, error) {
+	switch provider {
+	case "sumopod":
+		return requestResponsesAssessment(client, getenv("SUMOPOD_RESPONSES_URL", sumopodURL), os.Getenv("SUMOPOD_API_KEY"), model, input)
+	case "openai":
+		return requestResponsesAssessment(client, getenv("OPENAI_RESPONSES_URL", openAIResponsesURL), os.Getenv("OPENAI_API_KEY"), model, input)
+	case "google":
+		return requestGeminiAssessment(client, model, input)
+	default:
+		return "", fmt.Errorf("unsupported AI_PROVIDER %q", provider)
+	}
+}
+
+func requestResponsesAssessment(client *http.Client, endpoint, apiKey, model, input string) (string, error) {
+	if strings.TrimSpace(apiKey) == "" {
+		return "", fmt.Errorf("API key not set")
+	}
+	body, err := json.Marshal(responsesRequest{Model: model, Instructions: halalAssessmentInstructions, Input: input})
+	if err != nil {
+		return "", err
+	}
+	httpReq, err := http.NewRequest(http.MethodPost, endpoint, bytes.NewReader(body))
+	if err != nil {
+		return "", err
+	}
+	httpReq.Header.Set("Content-Type", "application/json")
+	httpReq.Header.Set("Authorization", "Bearer "+apiKey)
+	resp, err := client.Do(httpReq)
+	if err != nil {
+		return "", err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return "", fmt.Errorf("provider returned status %d", resp.StatusCode)
+	}
+	response, err := decodeResponsesResponse(resp)
+	if err != nil {
+		return "", err
+	}
+	return extractResponsesText(response), nil
+}
+
+func decodeResponsesResponse(resp *http.Response) (responsesResponse, error) {
+	var response responsesResponse
+	if !strings.Contains(strings.ToLower(resp.Header.Get("Content-Type")), "text/event-stream") {
+		return response, json.NewDecoder(resp.Body).Decode(&response)
+	}
+
+	scanner := bufio.NewScanner(resp.Body)
+	scanner.Buffer(make([]byte, 64*1024), 8<<20)
+	for scanner.Scan() {
+		line := strings.TrimSpace(scanner.Text())
+		if !strings.HasPrefix(line, "data:") {
+			continue
+		}
+		data := strings.TrimSpace(strings.TrimPrefix(line, "data:"))
+		if data == "" || data == "[DONE]" {
+			continue
+		}
+		var event struct {
+			Type     string            `json:"type"`
+			Response responsesResponse `json:"response"`
+		}
+		if err := json.Unmarshal([]byte(data), &event); err == nil && event.Type == "response.completed" {
+			return event.Response, nil
+		}
+	}
+	if err := scanner.Err(); err != nil {
+		return response, err
+	}
+	return response, fmt.Errorf("response.completed event not found")
+}
+
+func requestGeminiAssessment(client *http.Client, model, input string) (string, error) {
+	apiKey := strings.TrimSpace(os.Getenv("GOOGLE_API_KEY"))
+	if apiKey == "" {
+		return "", fmt.Errorf("API key not set")
+	}
+	body, err := json.Marshal(geminiRequest{
+		SystemInstruction: geminiContent{Parts: []geminiPart{{Text: halalAssessmentInstructions}}},
+		Contents:          []geminiContent{{Role: "user", Parts: []geminiPart{{Text: input}}}},
+	})
+	if err != nil {
+		return "", err
+	}
+	endpoint := strings.TrimRight(getenv("GOOGLE_GENERATIVE_URL", googleGenerativeURL), "/") + "/models/" + url.PathEscape(model) + ":generateContent"
+	httpReq, err := http.NewRequest(http.MethodPost, endpoint, bytes.NewReader(body))
+	if err != nil {
+		return "", err
+	}
+	httpReq.Header.Set("Content-Type", "application/json")
+	httpReq.Header.Set("X-Goog-Api-Key", apiKey)
+	resp, err := client.Do(httpReq)
+	if err != nil {
+		return "", err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return "", fmt.Errorf("provider returned status %d", resp.StatusCode)
+	}
+	var response geminiResponse
+	if err := json.NewDecoder(resp.Body).Decode(&response); err != nil {
+		return "", err
+	}
+	for _, candidate := range response.Candidates {
+		for _, part := range candidate.Content.Parts {
+			if part.Text != "" {
+				return part.Text, nil
+			}
+		}
+	}
+	return "", nil
+}
+
+func getenv(key, fallback string) string {
+	if value := strings.TrimSpace(os.Getenv(key)); value != "" {
+		return value
+	}
+	return fallback
 }
 
 func applyCompanyAssessments(groups [][]Job, assessments []companyAssessment) {

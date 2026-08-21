@@ -28,24 +28,38 @@ spec:
           command: ["/bin/sh", "-ec"]
           args:
             - |
-              mkdir -p /root/.picoclaw
-              jq '
-                .channel_list.telegram.allow_from = [env.TELEGRAM_USER_ID]
-                | .model_list |= map(.api_keys = [env.SUMOPOD_API_KEY])
-              ' /seed/config.json > /root/.picoclaw/config.json.tmp
-              mv /root/.picoclaw/config.json.tmp /root/.picoclaw/config.json
-              chmod 600 /root/.picoclaw/config.json
+              configure-ai /seed/config.json /root/.picoclaw/config.json
               if [ ! -f /root/.picoclaw/workspace/SOUL.md ]; then cp -R /seed/workspace /root/.picoclaw/workspace; fi
               mkdir -p /root/.picoclaw/workspace/skills/job-search
               cp /seed/workspace/skills/job-search/SKILL.md /root/.picoclaw/workspace/skills/job-search/SKILL.md
               CLEAN_BOT_TOKEN=$(printenv TELEGRAM_BOT_TOKEN | tr -d '\r\n')
               printf 'channels:\n  telegram:\n    settings:\n      token: "%s"\n' "$CLEAN_BOT_TOKEN" > /root/.picoclaw/.security.yml
           env:
+            - name: AI_PROVIDER
+              valueFrom:
+                secretKeyRef:
+                  name: ai-assistant-env
+                  key: AI_PROVIDER
+            - name: AI_MODEL
+              valueFrom:
+                secretKeyRef:
+                  name: ai-assistant-env
+                  key: AI_MODEL
             - name: SUMOPOD_API_KEY
               valueFrom:
                 secretKeyRef:
                   name: ai-assistant-env
                   key: SUMOPOD_API_KEY
+            - name: GOOGLE_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: ai-assistant-env
+                  key: GOOGLE_API_KEY
+            - name: OPENAI_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: ai-assistant-env
+                  key: OPENAI_API_KEY
             - name: TELEGRAM_BOT_TOKEN
               valueFrom:
                 secretKeyRef:
@@ -86,6 +100,31 @@ spec:
           env:
             - name: TZ
               value: Asia/Jakarta
+            - name: AI_PROVIDER
+              valueFrom:
+                secretKeyRef:
+                  name: ai-assistant-env
+                  key: AI_PROVIDER
+            - name: AI_MODEL
+              valueFrom:
+                secretKeyRef:
+                  name: ai-assistant-env
+                  key: AI_MODEL
+            - name: SUMOPOD_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: ai-assistant-env
+                  key: SUMOPOD_API_KEY
+            - name: GOOGLE_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: ai-assistant-env
+                  key: GOOGLE_API_KEY
+            - name: OPENAI_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: ai-assistant-env
+                  key: OPENAI_API_KEY
             - name: TELEGRAM_BOT_TOKEN
               valueFrom:
                 secretKeyRef:

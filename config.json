@@ -4,20 +4,13 @@
     "defaults": {
       "workspace": "/root/.picoclaw/workspace",
       "restrict_to_workspace": true,
-      "model_name": "deepseek-v4-flash",
+      "model_name": "",
       "max_tokens": 8192,
       "max_tool_iterations": 12,
       "max_parallel_turns": 1
     }
   },
-  "model_list": [
-    {
-      "model_name": "deepseek-v4-flash",
-      "provider": "azure",
-      "model": "deepseek-v4-flash",
-      "api_base": "http://127.0.0.1:8080"
-    }
-  ],
+  "model_list": [],
   "channel_list": {
     "telegram": {
       "enabled": true,

@@ -1,6 +1,10 @@
 #!/bin/sh
 set -eu
 
+# Always rebuild model configuration from the current environment. This also
+# replaces stale provider/model settings restored from the persistent volume.
+configure-ai /seed/config.json /root/.picoclaw/config.json
+
 # Start finance-api
 finance-api &
 finance_api_pid=$!

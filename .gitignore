@@ -13,6 +13,7 @@ tasks/*
 *credentials*
 *secret*
 *secrets*
+!k8s/apply-secret.sh
 *token*
 *.key
 *.pem

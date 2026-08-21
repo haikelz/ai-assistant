@@ -34,12 +34,13 @@ RUN apk add --no-cache curl jq
 
 COPY config.json /seed/config.json
 COPY workspace /seed/workspace
+COPY configure-ai.sh /usr/local/bin/configure-ai
 COPY --from=finance-builder /out/finance-api /usr/local/bin/finance-api
 COPY --from=job-alert-builder /out/job-alert /usr/local/bin/job-alert
 COPY --from=loker-api-builder /out/loker-api /usr/local/bin/loker-api
 COPY job-alert/loker.sh /usr/local/bin/loker
 COPY job-alert/loker-bot.sh /usr/local/bin/loker-bot.sh
-RUN chmod +x /usr/local/bin/loker /usr/local/bin/loker-bot.sh
+RUN chmod +x /usr/local/bin/configure-ai /usr/local/bin/loker /usr/local/bin/loker-bot.sh
 COPY app-entrypoint.sh /app-entrypoint.sh
 
 RUN chmod +x /app-entrypoint.sh
