@@ -39,6 +39,14 @@ AGENTS.md
 CLAUDE.md
 prompts/
 
+# Repository Harness policy and versioned schema are tracked; runtime state is not.
+!AGENTS.md
+!scripts/schema/
+!scripts/schema/*.sql
+harness.db
+harness.db-*
+.harness/
+
 # Local dependencies/build/cache/logs
 node_modules/
 vendor/

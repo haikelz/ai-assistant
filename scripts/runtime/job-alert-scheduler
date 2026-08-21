@@ -1,0 +1,17 @@
+#!/bin/sh
+set -eu
+
+STATE_FILE="/tmp/job-alert-scheduler.state"
+LAST_DAILY=$(cat "$STATE_FILE" 2>/dev/null || echo "")
+echo "job-alert: scheduler started" >&2
+while true; do
+	NOW_HOUR=$(TZ=Asia/Jakarta date +%H)
+	NOW_DATE=$(TZ=Asia/Jakarta date +%Y-%m-%d)
+	if [ "$NOW_HOUR" = "03" ] && [ "$LAST_DAILY" != "$NOW_DATE" ]; then
+		echo "job-alert: running daily halal assessment" >&2
+		/usr/local/bin/job-alert --halal &
+		echo "$NOW_DATE" > "$STATE_FILE"
+		LAST_DAILY="$NOW_DATE"
+	fi
+	sleep 30
+done

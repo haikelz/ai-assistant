@@ -5,23 +5,19 @@ set -eu
 # replaces stale provider/model settings restored from the persistent volume.
 configure-ai /seed/config.json /root/.picoclaw/config.json
 
-# Start finance-api
-finance-api &
-finance_api_pid=$!
+# Start the modular monolith HTTP runtime.
+ai-assistant &
+app_pid=$!
 
 until curl -fsS http://127.0.0.1:8080/health >/dev/null; do
-  if ! kill -0 "$finance_api_pid" 2>/dev/null; then
+  if ! kill -0 "$app_pid" 2>/dev/null; then
     exit 1
   fi
   sleep 0.1
 done
 
-# Start loker-api (handles /loker commands via curl from AI)
-loker-api &
-loker_api_pid=$!
-
 until curl -fsS http://127.0.0.1:8081/health >/dev/null; do
-  if ! kill -0 "$loker_api_pid" 2>/dev/null; then
+  if ! kill -0 "$app_pid" 2>/dev/null; then
     exit 1
   fi
   sleep 0.1
@@ -41,7 +37,7 @@ fi
 mkdir -p /root/.picoclaw/workspace/skills/job-search
 cp /seed/workspace/skills/job-search/SKILL.md /root/.picoclaw/workspace/skills/job-search/SKILL.md
 
-# Start loker-bot for daily job alert at 3 AM
-loker-bot.sh &
+# Start the daily halal-labelled job alert at 3 AM.
+job-alert-scheduler &
 
 exec /entrypoint.sh

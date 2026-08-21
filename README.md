@@ -1,6 +1,6 @@
 # AI Assistant
 
-PicoClaw Telegram assistant with configurable Sumopod, Google Gemini, or OpenAI models, plus two local Go services: a finance API and a job-alert module that scrapes Kitalulus and Dealls.
+PicoClaw Telegram assistant with configurable Sumopod, Google Gemini, or OpenAI models. The local backend is a Go Fiber modular monolith for finance, job search, and AI-provider compatibility.
 
 ## Setup
 
@@ -107,9 +107,7 @@ Every result remains visible and receives one label: `Halal`, `Tidak Halal — <
 
 ### Daily cron
 
-Runs automatically at 03:00 Asia/Jakarta via `loker-bot.sh` with halal labeling enabled and these default keywords:
-
-`fullstack developer`, `fullstack engineer`, `devops engineer`, `frontend developer`, `backend developer`, `frontend engineer`, `backend engineer`, `product developer`, `product engineer`.
+Runs automatically at 03:00 Asia/Jakarta via `job-alert-scheduler` with halal labeling enabled. The daily run retrieves current listings from both active sources and limits output to 20 matching results per source.
 
 ### Data sources
 
@@ -132,28 +130,30 @@ Max 20 results per source.
 ### How `/loker` works
 
 ```
-Telegram /loker → PicoClaw job-search skill → loker-api
-                  → /usr/local/bin/loker "<query>"
-                  → job-alert --keywords … --skills … --experience … --location …
+Telegram /loker → PicoClaw job-search skill → Fiber POST :8081/loker
+                  → jobsearch application service
                   → fetch Kitalulus + Dealls → filter → optional halal assessment → Telegram
 ```
 
 ### Architecture
 
-| Service     | Port  | Role                                                           |
-| ----------- | ----- | -------------------------------------------------------------- |
-| picoclaw    | 18790 | AI agent gateway, Telegram bot                                 |
-| finance-api | 8080  | Finance ledger + Google Sheets sync + Sumopod Responses proxy  |
-| loker-api   | 8081  | HTTP endpoint that runs a job search on request                |
-| loker-bot   | —     | Background scheduler for the 03:00 daily alert                 |
-| job-alert   | —     | Go binary: fetch, filter, and deliver job listings             |
+| Runtime | Port | Role |
+| --- | --- | --- |
+| picoclaw | 18790 | AI agent gateway and Telegram bot |
+| `cmd/app` | 8080 | Finance ledger, Google Sheets sync, and Sumopod Responses proxy |
+| `cmd/app` | 8081 | Compatible asynchronous `POST /loker` endpoint |
+| `job-alert-scheduler` | — | Background scheduler for the 03:00 daily alert |
+| `cmd/job-alert` | — | One-shot fetch, filter, halal assessment, and Telegram delivery |
 
 ### Binaries and scripts
 
-| Path                     | Purpose                                                            |
-| ------------------------ | ------------------------------------------------------------------ |
-| `job-alert/main.go`      | Fetcher + filter + Telegram delivery (one-shot binary)             |
-| `job-alert/loker.sh`     | Wrapper that parses the `\|` query into `job-alert` flags          |
-| `job-alert/loker-bot.sh` | Daily job-alert scheduler                                          |
-| `loker-api/main.go`      | HTTP service (`POST /loker`) that spawns `loker` in the background |
-| `finance-api/`           | Finance ledger, recap, and Sumopod Responses proxy                 |
+| Path | Purpose |
+| --- | --- |
+| `cmd/app` | Fiber composition root and process lifecycle |
+| `cmd/job-alert` | One-shot job-alert CLI |
+| `internal/domains/finance` | Finance domain, use cases, SQLite/Sheets adapters, HTTP delivery |
+| `internal/domains/jobsearch` | Job-search domain, orchestration, provider adapters, HTTP delivery |
+| `internal/domains/ai` | Sumopod Responses compatibility adapter and HTTP delivery |
+| `scripts/runtime` | Container wrappers and daily scheduler |
+
+Repository engineering workflow, traceability, and validation are documented in [`docs/HARNESS.md`](docs/HARNESS.md).
