@@ -34,6 +34,10 @@ func main() {
 	if cfg.WhatsAppRecipient != "" {
 		deliveries = append(deliveries, application.Delivery{Name: "whatsapp", Messenger: infrastructure.NewLocalWhatsApp(client, cfg.WhatsAppGatewayURL)})
 	}
+	if *scheduled && cfg.MailTo != "" {
+		email := infrastructure.NewEmail(infrastructure.EmailConfig{Mailer: cfg.MailMailer, Username: cfg.MailUsername, Password: cfg.MailPassword, Host: cfg.MailHost, Port: cfg.MailPort, Encryption: cfg.MailEncryption, From: cfg.MailFrom, To: cfg.MailTo})
+		deliveries = append(deliveries, application.Delivery{Name: "email", Messenger: email})
+	}
 	messenger := application.NewMultiMessenger(deliveries, log.Default())
 	service := application.NewService([]application.Source{loggingSource{infrastructure.NewKitalulus(client, "")}, loggingSource{infrastructure.NewDealls(client, "")}}, assessor, messenger, log.Default())
 	criteria := domain.Criteria{Positions: split(*keywords), Skills: split(*skills), Locations: split(*location), MaxYears: domain.ParseMaxYears(*experience), Halal: *halal, Interactive: strings.TrimSpace(*keywords) != ""}

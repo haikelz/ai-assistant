@@ -150,6 +150,29 @@ being attempted. WhatsApp Web automation is unofficial and may be disconnected
 or restricted by WhatsApp; Telegram remains the primary channel. Remove
 `WHATSAPP_RECIPIENT` to disable WhatsApp delivery.
 
+### Scheduled email delivery
+
+The 03:00 scheduled job alert can also send the same result by SMTP. Interactive
+`/loker` searches do not send email. Configure these values in `.env`:
+
+```dotenv
+MAIL_MAILER=smtp
+MAIL_USERNAME=your_email@gmail.com
+MAIL_PASSWORD=your_gmail_app_password
+MAIL_HOST=smtp.gmail.com
+MAIL_PORT=465
+MAIL_ENCRYPTION=ssl
+MAIL_FROM=your_email@gmail.com
+MAIL_TO=recipient@example.com
+```
+
+For Gmail, enable two-step verification and use an App Password rather than the
+account password. Port 465 uses implicit TLS, and the deployment network policy
+allows that port without permitting unencrypted SMTP fallback. Email is enabled
+only when `MAIL_TO` is set; remove it to roll back to Telegram and optional
+WhatsApp delivery. Each channel is attempted independently, and failed SMTP
+sends are not retried automatically to avoid duplicate email.
+
 ### Data sources
 
 | Source    | Method            | Endpoint                         |
@@ -185,7 +208,7 @@ Telegram /loker → PicoClaw job-search skill → Fiber POST :8081/loker
 | `cmd/app` | 8080 | Finance ledger, Google Sheets sync, and Sumopod Responses proxy |
 | `cmd/app` | 8081 | Compatible asynchronous `POST /loker` endpoint |
 | `job-alert-scheduler` | — | Background scheduler for the 03:00 daily alert |
-| `cmd/job-alert` | — | One-shot fetch, filter, halal assessment, and Telegram/WhatsApp delivery |
+| `cmd/job-alert` | — | One-shot fetch, filter, halal assessment, and scheduled multi-channel delivery |
 
 ### Binaries and scripts
 

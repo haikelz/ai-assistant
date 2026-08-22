@@ -5,6 +5,7 @@ go 1.25.0
 require (
 	github.com/gofiber/fiber/v2 v2.52.10
 	github.com/mdp/qrterminal/v3 v3.2.1
+	github.com/wneessen/go-mail v0.8.1
 	github.com/xuri/excelize/v2 v2.10.1
 	go.mau.fi/whatsmeow v0.0.0-20260821131652-72f22e67194f
 	golang.org/x/oauth2 v0.36.0

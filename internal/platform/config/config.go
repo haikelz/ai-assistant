@@ -13,6 +13,8 @@ type Config struct {
 	SumopodAPIKey, OpenAIAPIKey, GoogleAPIKey                          string
 	OpenAIResponsesURL, GoogleGenerativeURL                            string
 	TelegramBotToken, TelegramUserID, WhatsAppRecipient                string
+	MailMailer, MailUsername, MailPassword, MailHost                   string
+	MailPort, MailEncryption, MailFrom, MailTo                         string
 	SpreadsheetID, ServiceAccountBase64                                string
 }
 
@@ -24,6 +26,7 @@ func Load() Config {
 		SumopodAPIKey: strings.TrimSpace(os.Getenv("SUMOPOD_API_KEY")), OpenAIAPIKey: strings.TrimSpace(os.Getenv("OPENAI_API_KEY")), GoogleAPIKey: strings.TrimSpace(os.Getenv("GOOGLE_API_KEY")),
 		OpenAIResponsesURL: getenv("OPENAI_RESPONSES_URL", "https://api.openai.com/v1/responses"), GoogleGenerativeURL: getenv("GOOGLE_GENERATIVE_URL", "https://generativelanguage.googleapis.com/v1beta"),
 		TelegramBotToken: strings.TrimSpace(os.Getenv("TELEGRAM_BOT_TOKEN")), TelegramUserID: strings.TrimSpace(os.Getenv("TELEGRAM_USER_ID")), WhatsAppRecipient: strings.TrimSpace(os.Getenv("WHATSAPP_RECIPIENT")), SpreadsheetID: strings.TrimSpace(os.Getenv("GOOGLE_SHEETS_SPREADSHEET_ID")), ServiceAccountBase64: strings.TrimSpace(os.Getenv("GOOGLE_SERVICE_ACCOUNT_JSON_BASE64")),
+		MailMailer: strings.TrimSpace(os.Getenv("MAIL_MAILER")), MailUsername: strings.TrimSpace(os.Getenv("MAIL_USERNAME")), MailPassword: strings.TrimSpace(os.Getenv("MAIL_PASSWORD")), MailHost: strings.TrimSpace(os.Getenv("MAIL_HOST")), MailPort: strings.TrimSpace(os.Getenv("MAIL_PORT")), MailEncryption: strings.TrimSpace(os.Getenv("MAIL_ENCRYPTION")), MailFrom: strings.TrimSpace(os.Getenv("MAIL_FROM")), MailTo: strings.TrimSpace(os.Getenv("MAIL_TO")),
 	}
 }
 

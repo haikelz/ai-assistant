@@ -140,6 +140,46 @@ spec:
                 secretKeyRef:
                   name: ai-assistant-env
                   key: WHATSAPP_RECIPIENT
+            - name: MAIL_MAILER
+              valueFrom:
+                secretKeyRef:
+                  name: ai-assistant-env
+                  key: MAIL_MAILER
+            - name: MAIL_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: ai-assistant-env
+                  key: MAIL_USERNAME
+            - name: MAIL_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: ai-assistant-env
+                  key: MAIL_PASSWORD
+            - name: MAIL_HOST
+              valueFrom:
+                secretKeyRef:
+                  name: ai-assistant-env
+                  key: MAIL_HOST
+            - name: MAIL_PORT
+              valueFrom:
+                secretKeyRef:
+                  name: ai-assistant-env
+                  key: MAIL_PORT
+            - name: MAIL_ENCRYPTION
+              valueFrom:
+                secretKeyRef:
+                  name: ai-assistant-env
+                  key: MAIL_ENCRYPTION
+            - name: MAIL_FROM
+              valueFrom:
+                secretKeyRef:
+                  name: ai-assistant-env
+                  key: MAIL_FROM
+            - name: MAIL_TO
+              valueFrom:
+                secretKeyRef:
+                  name: ai-assistant-env
+                  key: MAIL_TO
           ports:
             - name: http
               containerPort: 18790
