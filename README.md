@@ -19,6 +19,7 @@ Required variables:
 - The matching API key: `SUMOPOD_API_KEY`, `GOOGLE_API_KEY`, or `OPENAI_API_KEY`
 - `TELEGRAM_BOT_TOKEN`
 - `TELEGRAM_USER_ID` from Telegram's numeric user ID
+- Optional `WHATSAPP_RECIPIENT` to send job results to one WhatsApp number
 
 Examples:
 
@@ -121,6 +122,34 @@ stored at `/root/.picoclaw/job-alert.json` on the existing persistent volume, so
 it survives pod restarts. Halal labeling is always enabled for scheduled runs,
 regardless of whether `halal` is included in the command.
 
+### WhatsApp Web delivery
+
+Set `WHATSAPP_RECIPIENT` to an Indonesian local number such as
+`081234567890`, or an international number such as `6281234567890`. When this
+variable is empty, the application remains Telegram-only and does not open a
+WhatsApp session.
+
+After the first deployment with a recipient configured, follow the application
+logs:
+
+```sh
+kubectl logs -n default -f deploy/ai-assistant -c picoclaw
+```
+
+Scan the rendered QR in WhatsApp under **Perangkat tertaut → Tautkan
+perangkat**. Treat the QR as a temporary credential and do not share the logs
+while it is visible. The linked-device session is stored at
+`/root/.picoclaw/whatsapp.db` on the existing PVC, so ordinary pod restarts do
+not require another scan. If pairing times out, restart the pod to print a new
+QR. To unlink or re-pair, remove the linked device in WhatsApp, remove the
+session database from the PVC, and restart the pod.
+
+Both `/loker` and the 03:00 scheduled alert send independently to Telegram and
+WhatsApp. A failure in one channel does not prevent the other channel from
+being attempted. WhatsApp Web automation is unofficial and may be disconnected
+or restricted by WhatsApp; Telegram remains the primary channel. Remove
+`WHATSAPP_RECIPIENT` to disable WhatsApp delivery.
+
 ### Data sources
 
 | Source    | Method            | Endpoint                         |
@@ -144,7 +173,8 @@ Max 20 results per source.
 ```
 Telegram /loker → PicoClaw job-search skill → Fiber POST :8081/loker
                   → jobsearch application service
-                  → fetch Kitalulus + Dealls → filter → optional halal assessment → Telegram
+                  → fetch Kitalulus + Dealls → filter → optional halal assessment
+                  → Telegram + optional WhatsApp Web
 ```
 
 ### Architecture
@@ -155,7 +185,7 @@ Telegram /loker → PicoClaw job-search skill → Fiber POST :8081/loker
 | `cmd/app` | 8080 | Finance ledger, Google Sheets sync, and Sumopod Responses proxy |
 | `cmd/app` | 8081 | Compatible asynchronous `POST /loker` endpoint |
 | `job-alert-scheduler` | — | Background scheduler for the 03:00 daily alert |
-| `cmd/job-alert` | — | One-shot fetch, filter, halal assessment, and Telegram delivery |
+| `cmd/job-alert` | — | One-shot fetch, filter, halal assessment, and Telegram/WhatsApp delivery |
 
 ### Binaries and scripts
 

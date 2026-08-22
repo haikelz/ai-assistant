@@ -29,7 +29,12 @@ func main() {
 	cfg := config.Load()
 	client := &http.Client{Timeout: 120 * time.Second}
 	assessor := infrastructure.NewAIAssessor(client, infrastructure.Config{Provider: cfg.AIProvider, Model: cfg.AIModel, SumopodAPIKey: cfg.SumopodAPIKey, OpenAIAPIKey: cfg.OpenAIAPIKey, GoogleAPIKey: cfg.GoogleAPIKey, SumopodURL: cfg.SumopodResponsesURL, OpenAIURL: cfg.OpenAIResponsesURL, GoogleURL: cfg.GoogleGenerativeURL})
-	messenger := infrastructure.NewTelegram(client, cfg.TelegramBotToken, cfg.TelegramUserID, "")
+	telegram := infrastructure.NewTelegram(client, cfg.TelegramBotToken, cfg.TelegramUserID, "")
+	deliveries := []application.Delivery{{Name: "telegram", Messenger: telegram}}
+	if cfg.WhatsAppRecipient != "" {
+		deliveries = append(deliveries, application.Delivery{Name: "whatsapp", Messenger: infrastructure.NewLocalWhatsApp(client, cfg.WhatsAppGatewayURL)})
+	}
+	messenger := application.NewMultiMessenger(deliveries, log.Default())
 	service := application.NewService([]application.Source{loggingSource{infrastructure.NewKitalulus(client, "")}, loggingSource{infrastructure.NewDealls(client, "")}}, assessor, messenger, log.Default())
 	criteria := domain.Criteria{Positions: split(*keywords), Skills: split(*skills), Locations: split(*location), MaxYears: domain.ParseMaxYears(*experience), Halal: *halal, Interactive: strings.TrimSpace(*keywords) != ""}
 	if *scheduled {

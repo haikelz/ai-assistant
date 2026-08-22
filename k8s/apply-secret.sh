@@ -37,7 +37,8 @@ set -- kubectl create secret generic ai-assistant-env \
   --from-literal=GOOGLE_API_KEY="${GOOGLE_API_KEY:-}" \
   --from-literal=OPENAI_API_KEY="${OPENAI_API_KEY:-}" \
   --from-literal=TELEGRAM_BOT_TOKEN="$TELEGRAM_BOT_TOKEN" \
-  --from-literal=TELEGRAM_USER_ID="$TELEGRAM_USER_ID"
+  --from-literal=TELEGRAM_USER_ID="$TELEGRAM_USER_ID" \
+  --from-literal=WHATSAPP_RECIPIENT="${WHATSAPP_RECIPIENT:-}"
 
 if [ -n "${GOOGLE_SHEETS_SPREADSHEET_ID:-}" ] || [ -n "${GOOGLE_SERVICE_ACCOUNT_JSON_BASE64:-}" ]; then
   : "${GOOGLE_SHEETS_SPREADSHEET_ID:?GOOGLE_SHEETS_SPREADSHEET_ID must be set when Google Sheets is enabled}"
