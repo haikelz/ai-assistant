@@ -1,10 +1,17 @@
 package domain
 
 import (
+	"errors"
 	"fmt"
 	"sort"
 	"strconv"
 	"strings"
+	"time"
+)
+
+var (
+	ErrAlertConfigNotFound = errors.New("job alert configuration not found")
+	ErrInvalidAlertConfig  = errors.New("invalid job alert configuration")
 )
 
 const (
@@ -20,12 +27,21 @@ type Job struct {
 }
 
 type Criteria struct {
-	Positions, Skills, Locations []string
-	MaxYears                     int
-	Halal, Interactive           bool
+	Positions   []string `json:"positions"`
+	Skills      []string `json:"skills"`
+	Locations   []string `json:"locations"`
+	MaxYears    int      `json:"max_years"`
+	Halal       bool     `json:"halal"`
+	Interactive bool     `json:"interactive,omitempty"`
 }
 
 type Result struct{ Kitalulus, Dealls []Job }
+
+type AlertConfig struct {
+	Query     string    `json:"query"`
+	Criteria  Criteria  `json:"criteria,omitempty"`
+	UpdatedAt time.Time `json:"updated_at"`
+}
 
 func ParseQuery(raw string) Criteria {
 	p := strings.Split(raw, "|")

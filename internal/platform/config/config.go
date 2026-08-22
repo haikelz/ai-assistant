@@ -6,18 +6,18 @@ import (
 )
 
 type Config struct {
-	FinanceAddress, JobSearchAddress, DatabasePath string
-	SumopodResponsesURL                            string
-	AIProvider, AIModel                            string
-	SumopodAPIKey, OpenAIAPIKey, GoogleAPIKey      string
-	OpenAIResponsesURL, GoogleGenerativeURL        string
-	TelegramBotToken, TelegramUserID               string
-	SpreadsheetID, ServiceAccountBase64            string
+	FinanceAddress, JobSearchAddress, DatabasePath, JobAlertConfigPath string
+	SumopodResponsesURL                                                string
+	AIProvider, AIModel                                                string
+	SumopodAPIKey, OpenAIAPIKey, GoogleAPIKey                          string
+	OpenAIResponsesURL, GoogleGenerativeURL                            string
+	TelegramBotToken, TelegramUserID                                   string
+	SpreadsheetID, ServiceAccountBase64                                string
 }
 
 func Load() Config {
 	return Config{
-		FinanceAddress: getenv("FINANCE_ADDR", "127.0.0.1:8080"), JobSearchAddress: getenv("LOKER_ADDR", "127.0.0.1:8081"), DatabasePath: getenv("FINANCE_DB_PATH", "/root/.picoclaw/finance.db"),
+		FinanceAddress: getenv("FINANCE_ADDR", "127.0.0.1:8080"), JobSearchAddress: getenv("LOKER_ADDR", "127.0.0.1:8081"), DatabasePath: getenv("FINANCE_DB_PATH", "/root/.picoclaw/finance.db"), JobAlertConfigPath: getenv("JOB_ALERT_CONFIG_PATH", "/root/.picoclaw/job-alert.json"),
 		SumopodResponsesURL: getenv("SUMOPOD_RESPONSES_URL", "https://ai.sumopod.com/v1/responses"), AIProvider: getenv("AI_PROVIDER", "sumopod"), AIModel: strings.TrimSpace(os.Getenv("AI_MODEL")),
 		SumopodAPIKey: strings.TrimSpace(os.Getenv("SUMOPOD_API_KEY")), OpenAIAPIKey: strings.TrimSpace(os.Getenv("OPENAI_API_KEY")), GoogleAPIKey: strings.TrimSpace(os.Getenv("GOOGLE_API_KEY")),
 		OpenAIResponsesURL: getenv("OPENAI_RESPONSES_URL", "https://api.openai.com/v1/responses"), GoogleGenerativeURL: getenv("GOOGLE_GENERATIVE_URL", "https://generativelanguage.googleapis.com/v1beta"),

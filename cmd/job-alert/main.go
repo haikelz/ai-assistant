@@ -22,6 +22,7 @@ func main() {
 	skills := flag.String("skills", "", "comma-separated skills")
 	experience := flag.String("experience", "", "experience range, e.g. 1-3")
 	halal := flag.Bool("halal", false, "assess company business against halal criteria")
+	scheduled := flag.Bool("scheduled", false, "use the persisted daily job-alert criteria")
 	dryRun := flag.Bool("dry-run", false, "print instead of sending")
 	flag.Parse()
 
@@ -31,6 +32,15 @@ func main() {
 	messenger := infrastructure.NewTelegram(client, cfg.TelegramBotToken, cfg.TelegramUserID, "")
 	service := application.NewService([]application.Source{loggingSource{infrastructure.NewKitalulus(client, "")}, loggingSource{infrastructure.NewDealls(client, "")}}, assessor, messenger, log.Default())
 	criteria := domain.Criteria{Positions: split(*keywords), Skills: split(*skills), Locations: split(*location), MaxYears: domain.ParseMaxYears(*experience), Halal: *halal, Interactive: strings.TrimSpace(*keywords) != ""}
+	if *scheduled {
+		settings := application.NewSettingsService(infrastructure.NewJSONAlertConfigStore(cfg.JobAlertConfigPath))
+		var err error
+		criteria, err = settings.ScheduledCriteria(context.Background())
+		if err != nil {
+			log.Fatalf("job-alert: load scheduled criteria: %v", err)
+		}
+		fmt.Fprintf(os.Stderr, "job-alert: scheduled criteria positions=%q skills=%q locations=%q max_years=%d halal=%t\n", criteria.Positions, criteria.Skills, criteria.Locations, criteria.MaxYears, criteria.Halal)
+	}
 
 	fmt.Fprintln(os.Stderr, "job-alert: fetching")
 	result, err := service.Search(context.Background(), criteria)

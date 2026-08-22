@@ -109,6 +109,18 @@ Every result remains visible and receives one label: `Halal`, `Tidak Halal — <
 
 Runs automatically at 03:00 Asia/Jakarta via `job-alert-scheduler` with halal labeling enabled. The daily run retrieves current listings from both active sources and limits output to 20 matching results per source.
 
+Configure its search criteria from Telegram with the same fields as `/loker`:
+
+```
+/job-alert Software Engineer | go,typescript | 1-3 | Jakarta
+```
+
+Position is required. Skills, experience, and location remain optional. Sending
+`/job-alert` without arguments shows the active configuration. The setting is
+stored at `/root/.picoclaw/job-alert.json` on the existing persistent volume, so
+it survives pod restarts. Halal labeling is always enabled for scheduled runs,
+regardless of whether `halal` is included in the command.
+
 ### Data sources
 
 | Source    | Method            | Endpoint                         |

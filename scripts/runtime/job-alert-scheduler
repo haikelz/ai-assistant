@@ -8,8 +8,8 @@ while true; do
 	NOW_HOUR=$(TZ=Asia/Jakarta date +%H)
 	NOW_DATE=$(TZ=Asia/Jakarta date +%Y-%m-%d)
 	if [ "$NOW_HOUR" = "03" ] && [ "$LAST_DAILY" != "$NOW_DATE" ]; then
-		echo "job-alert: running daily halal assessment" >&2
-		/usr/local/bin/job-alert --halal &
+		echo "job-alert: running configured daily halal assessment" >&2
+		/usr/local/bin/job-alert --scheduled &
 		echo "$NOW_DATE" > "$STATE_FILE"
 		LAST_DAILY="$NOW_DATE"
 	fi

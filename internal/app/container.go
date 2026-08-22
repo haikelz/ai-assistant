@@ -52,6 +52,7 @@ func NewContainer(ctx context.Context, cfg config.Config) (*Container, error) {
 	assessor := jobinfra.NewAIAssessor(client, jobinfra.Config{Provider: cfg.AIProvider, Model: cfg.AIModel, SumopodAPIKey: cfg.SumopodAPIKey, OpenAIAPIKey: cfg.OpenAIAPIKey, GoogleAPIKey: cfg.GoogleAPIKey, SumopodURL: cfg.SumopodResponsesURL, OpenAIURL: cfg.OpenAIResponsesURL, GoogleURL: cfg.GoogleGenerativeURL})
 	messenger := jobinfra.NewTelegram(client, cfg.TelegramBotToken, cfg.TelegramUserID, "")
 	jobService := jobapp.NewService([]jobapp.Source{jobinfra.NewKitalulus(client, ""), jobinfra.NewDealls(client, "")}, assessor, messenger, log.Default())
+	settingsService := jobapp.NewSettingsService(jobinfra.NewJSONAlertConfigStore(cfg.JobAlertConfigPath))
 
 	mainAPI := newFiber()
 	financed.NewHandler(financeService).Register(mainAPI)
@@ -59,6 +60,7 @@ func NewContainer(ctx context.Context, cfg config.Config) (*Container, error) {
 	jobAPI := newFiber()
 	jobAPI.Get("/health", func(c *fiber.Ctx) error { return c.SendStatus(fiber.StatusNoContent) })
 	jobd.NewHandler(jobService).Register(jobAPI)
+	jobd.NewSettingsHandler(settingsService).Register(jobAPI)
 	return &Container{Config: cfg, DB: db, FinanceApp: mainAPI, JobSearchApp: jobAPI}, nil
 }
 
