@@ -36,7 +36,7 @@ func main() {
 	assessor := infrastructure.NewAIAssessor(client, infrastructure.Config{Provider: cfg.AIProvider, Model: cfg.AIModel, SumopodAPIKey: cfg.SumopodAPIKey, OpenAIAPIKey: cfg.OpenAIAPIKey, GoogleAPIKey: cfg.GoogleAPIKey, SumopodURL: cfg.SumopodResponsesURL, OpenAIURL: cfg.OpenAIResponsesURL, GoogleURL: cfg.GoogleGenerativeURL})
 	telegram := infrastructure.NewTelegram(client, cfg.TelegramBotToken, cfg.TelegramUserID, "")
 	deliveries := []application.Delivery{{Name: "telegram", Messenger: telegram}}
-	if cfg.WhatsAppRecipient != "" {
+	if *scheduled && cfg.WhatsAppRecipient != "" {
 		deliveries = append(deliveries, application.Delivery{Name: "whatsapp", Messenger: infrastructure.NewLocalWhatsApp(client, cfg.WhatsAppGatewayURL)})
 	}
 	if *scheduled && cfg.MailTo != "" {

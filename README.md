@@ -19,7 +19,7 @@ Required variables:
 - The matching API key: `SUMOPOD_API_KEY`, `GOOGLE_API_KEY`, or `OPENAI_API_KEY`
 - `TELEGRAM_BOT_TOKEN`
 - `TELEGRAM_USER_ID` from Telegram's numeric user ID
-- Optional `WHATSAPP_RECIPIENT` to send job results to one WhatsApp number
+- Optional `WHATSAPP_RECIPIENT` to send scheduled job alerts to one WhatsApp number
 
 Examples:
 
@@ -171,11 +171,12 @@ not require another scan. If pairing times out, restart the pod to print a new
 QR. To unlink or re-pair, remove the linked device in WhatsApp, remove the
 session database from the PVC, and restart the pod.
 
-Both `/loker` and the 03:00 scheduled alert send independently to Telegram and
-WhatsApp. A failure in one channel does not prevent the other channel from
-being attempted. WhatsApp Web automation is unofficial and may be disconnected
-or restricted by WhatsApp; Telegram remains the primary channel. Remove
-`WHATSAPP_RECIPIENT` to disable WhatsApp delivery.
+Only the 03:00 scheduled alert sends to WhatsApp. Interactive `/loker`
+acknowledgements and results remain Telegram-only. During a scheduled run, a
+failure in one channel does not prevent the other channels from being attempted.
+WhatsApp Web automation is unofficial and may be disconnected or restricted by
+WhatsApp; Telegram remains the primary channel. Remove `WHATSAPP_RECIPIENT` to
+disable scheduled WhatsApp delivery.
 
 ### Scheduled email delivery
 
@@ -235,7 +236,7 @@ Interactive `/loker` returns at most 20 results per source.
 ```
 Telegram /loker → PicoClaw job-search skill → Fiber POST :8081/loker
                   → legacy interactive service (no historical dedupe)
-                  → Kitalulus + Dealls → Telegram + optional WhatsApp
+                  → Kitalulus + Dealls → Telegram only
 
 03:00 scheduler → search planner → Glints + Kitalulus + Dealls
                 → normalize → SQLite content-hash dedupe → pre-filter

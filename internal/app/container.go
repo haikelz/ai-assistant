@@ -53,7 +53,6 @@ func NewContainer(ctx context.Context, cfg config.Config) (*Container, error) {
 	proxy := aiinfra.NewSumopodProxy(client, cfg.SumopodResponsesURL)
 	assessor := jobinfra.NewAIAssessor(client, jobinfra.Config{Provider: cfg.AIProvider, Model: cfg.AIModel, SumopodAPIKey: cfg.SumopodAPIKey, OpenAIAPIKey: cfg.OpenAIAPIKey, GoogleAPIKey: cfg.GoogleAPIKey, SumopodURL: cfg.SumopodResponsesURL, OpenAIURL: cfg.OpenAIResponsesURL, GoogleURL: cfg.GoogleGenerativeURL})
 	telegram := jobinfra.NewTelegram(client, cfg.TelegramBotToken, cfg.TelegramUserID, "")
-	deliveries := []jobapp.Delivery{{Name: "telegram", Messenger: telegram}}
 	var whatsAppGateway *jobinfra.WhatsAppGateway
 	var whatsAppMessenger *jobinfra.WhatsApp
 	if cfg.WhatsAppRecipient != "" {
@@ -67,10 +66,9 @@ func NewContainer(ctx context.Context, cfg config.Config) (*Container, error) {
 		} else {
 			whatsAppGateway = gateway
 			whatsAppMessenger = adapter
-			deliveries = append(deliveries, jobapp.Delivery{Name: "whatsapp", Messenger: adapter})
 		}
 	}
-	messenger := jobapp.NewMultiMessenger(deliveries, log.Default())
+	messenger := jobapp.NewMultiMessenger(interactiveJobDeliveries(telegram), log.Default())
 	jobService := jobapp.NewService([]jobapp.Source{jobinfra.NewKitalulus(client, ""), jobinfra.NewDealls(client, "")}, assessor, messenger, log.Default())
 	settingsService := jobapp.NewSettingsService(jobinfra.NewJSONAlertConfigStore(cfg.JobAlertConfigPath))
 
@@ -83,6 +81,10 @@ func NewContainer(ctx context.Context, cfg config.Config) (*Container, error) {
 	jobd.NewSettingsHandler(settingsService).Register(jobAPI)
 	jobd.NewWhatsAppHandler(whatsAppMessenger).Register(jobAPI)
 	return &Container{Config: cfg, DB: db, WhatsApp: whatsAppGateway, FinanceApp: mainAPI, JobSearchApp: jobAPI}, nil
+}
+
+func interactiveJobDeliveries(telegram jobapp.Messenger) []jobapp.Delivery {
+	return []jobapp.Delivery{{Name: "telegram", Messenger: telegram}}
 }
 
 func newFiber() *fiber.App {
