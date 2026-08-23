@@ -60,7 +60,7 @@ func (a *AIAssessor) Assess(ctx context.Context, jobs []domain.Job) ([]domain.Jo
 		}{company.Company, company.Roles})
 	}
 	input, _ := json.Marshal(companyList)
-	text, err := a.request(ctx, string(input))
+	text, err := a.request(ctx, instructions, string(input))
 	if err != nil {
 		return out, err
 	}
@@ -82,7 +82,7 @@ func (a *AIAssessor) Assess(ctx context.Context, jobs []domain.Job) ([]domain.Jo
 	}
 	return out, nil
 }
-func (a *AIAssessor) request(ctx context.Context, input string) (string, error) {
+func (a *AIAssessor) request(ctx context.Context, systemInstructions, input string) (string, error) {
 	p := strings.ToLower(strings.TrimSpace(a.config.Provider))
 	if p == "" {
 		p = "sumopod"
@@ -95,7 +95,7 @@ func (a *AIAssessor) request(ctx context.Context, input string) (string, error) 
 		if base == "" {
 			base = "https://generativelanguage.googleapis.com/v1beta"
 		}
-		body, _ := json.Marshal(map[string]any{"system_instruction": map[string]any{"parts": []map[string]string{{"text": instructions}}}, "contents": []any{map[string]any{"role": "user", "parts": []map[string]string{{"text": input}}}}})
+		body, _ := json.Marshal(map[string]any{"system_instruction": map[string]any{"parts": []map[string]string{{"text": systemInstructions}}}, "contents": []any{map[string]any{"role": "user", "parts": []map[string]string{{"text": input}}}}})
 		return a.doGemini(ctx, strings.TrimRight(base, "/")+"/models/"+url.PathEscape(a.config.Model)+":generateContent", body)
 	}
 	endpoint, key := a.config.SumopodURL, a.config.SumopodAPIKey
@@ -115,7 +115,7 @@ func (a *AIAssessor) request(ctx context.Context, input string) (string, error) 
 	if strings.TrimSpace(key) == "" {
 		return "", fmt.Errorf("%s API key not set", p)
 	}
-	body, _ := json.Marshal(map[string]string{"model": a.config.Model, "instructions": instructions, "input": input})
+	body, _ := json.Marshal(map[string]string{"model": a.config.Model, "instructions": systemInstructions, "input": input})
 	req, _ := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, bytes.NewReader(body))
 	req.Header.Set("Authorization", "Bearer "+key)
 	req.Header.Set("Content-Type", "application/json")
