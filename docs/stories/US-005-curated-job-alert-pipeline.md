@@ -1,7 +1,7 @@
 # US-005: Curated Job-Alert Pipeline
 
 **Lane:** high-risk
-**Status:** in_progress
+**Status:** implemented
 
 ## Contract
 
@@ -16,23 +16,23 @@ in-pod scheduler remains the owner of scheduled execution.
 
 ## Acceptance Criteria
 
-- [ ] Providers return source-independent raw jobs and fail independently.
-- [ ] Glints reads only public server-rendered listings, is rate-limited and
+- [x] Providers return source-independent raw jobs and fail independently.
+- [x] Glints reads only public server-rendered listings, is rate-limited and
       bounded, and stops on access-control or challenge responses.
-- [ ] Normalization creates stable IDs and deterministic SHA-256 content hashes.
-- [ ] SQLite records new, changed, and unchanged jobs with first/last-seen times
+- [x] Normalization creates stable IDs and deterministic SHA-256 content hashes.
+- [x] SQLite records new, changed, and unchanged jobs with first/last-seen times
       and persists alert-run counters and status.
-- [ ] Scheduled runs skip unchanged jobs before AI calls; interactive searches
+- [x] Scheduled runs skip unchanged jobs before AI calls; interactive searches
       remain unaffected by historical deduplication.
-- [ ] Search planning caps query variations and provider concurrency/timeouts.
-- [ ] Deterministic pre-filtering applies role, exclusion, work-mode,
+- [x] Search planning caps query variations and provider concurrency/timeouts.
+- [x] Deterministic pre-filtering applies role, exclusion, work-mode,
       experience, salary, and location rules before AI classification.
-- [ ] AI classification is batched and produces relevance, skill, seniority,
+- [x] AI classification is batched and produces relevance, skill, seniority,
       summary, and halal fields with conservative fallback values.
-- [ ] Hybrid scoring uses the documented 35/30/15/10/5/5 weights and a default
+- [x] Hybrid scoring uses the documented 35/30/15/10/5/5 weights and a default
       threshold of 70.
-- [ ] Telegram, WhatsApp, and email receive one categorized digest.
-- [ ] Tests use temporary SQLite, fixtures, and fake AI/provider clients only.
+- [x] Telegram, WhatsApp, and email receive one categorized digest.
+- [x] Tests use temporary SQLite, fixtures, and fake AI/provider clients only.
 
 ## Risks and Rollback
 
