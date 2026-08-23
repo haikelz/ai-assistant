@@ -12,6 +12,8 @@ import (
 var (
 	ErrAlertConfigNotFound = errors.New("job alert configuration not found")
 	ErrInvalidAlertConfig  = errors.New("invalid job alert configuration")
+	ErrProviderBlocked     = errors.New("job provider access blocked")
+	ErrProviderLayout      = errors.New("job provider layout changed")
 )
 
 const (
@@ -27,12 +29,17 @@ type Job struct {
 }
 
 type Criteria struct {
-	Positions   []string `json:"positions"`
-	Skills      []string `json:"skills"`
-	Locations   []string `json:"locations"`
-	MaxYears    int      `json:"max_years"`
-	Halal       bool     `json:"halal"`
-	Interactive bool     `json:"interactive,omitempty"`
+	Positions       []string   `json:"positions"`
+	Skills          []string   `json:"skills"`
+	Locations       []string   `json:"locations"`
+	ExcludeKeywords []string   `json:"exclude_keywords,omitempty"`
+	WorkModes       []WorkMode `json:"work_modes,omitempty"`
+	MaxYears        int        `json:"max_years"`
+	MinSalary       int64      `json:"min_salary,omitempty"`
+	MinMatchScore   float64    `json:"min_match_score,omitempty"`
+	StrictWorkMode  bool       `json:"strict_work_mode,omitempty"`
+	Halal           bool       `json:"halal"`
+	Interactive     bool       `json:"interactive,omitempty"`
 }
 
 type Result struct{ Kitalulus, Dealls []Job }

@@ -38,6 +38,14 @@ type SearchQuery struct {
 	Location string
 }
 
+type UpsertOutcome string
+
+const (
+	UpsertNew       UpsertOutcome = "new"
+	UpsertUpdated   UpsertOutcome = "updated"
+	UpsertUnchanged UpsertOutcome = "unchanged"
+)
+
 type Classification struct {
 	JobID                        string
 	Category, Seniority, Summary string

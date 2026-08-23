@@ -23,15 +23,15 @@ func TestSQLiteJobStoreDeduplicatesAndAuditsRuns(t *testing.T) {
 	}
 	now := time.Date(2026, 8, 23, 3, 0, 0, 0, time.UTC)
 	job := domain.NormalizedJob{ID: "dealls:1", Source: "dealls", ExternalID: "1", CanonicalURL: "https://example/1", Title: "Engineer", NormalizedTitle: "engineer", Company: "A", Skills: []string{"go"}, ContentHash: "hash-1", FirstSeenAt: now, LastSeenAt: now}
-	if outcome, err := store.Upsert(t.Context(), job); err != nil || outcome != OutcomeNew {
+	if outcome, err := store.Upsert(t.Context(), job); err != nil || outcome != domain.UpsertNew {
 		t.Fatalf("new outcome=%q err=%v", outcome, err)
 	}
 	job.LastSeenAt = now.Add(time.Hour)
-	if outcome, err := store.Upsert(t.Context(), job); err != nil || outcome != OutcomeUnchanged {
+	if outcome, err := store.Upsert(t.Context(), job); err != nil || outcome != domain.UpsertUnchanged {
 		t.Fatalf("unchanged outcome=%q err=%v", outcome, err)
 	}
 	job.ContentHash = "hash-2"
-	if outcome, err := store.Upsert(t.Context(), job); err != nil || outcome != OutcomeUpdated {
+	if outcome, err := store.Upsert(t.Context(), job); err != nil || outcome != domain.UpsertUpdated {
 		t.Fatalf("updated outcome=%q err=%v", outcome, err)
 	}
 	run := domain.AlertRun{ID: "run-1", StartedAt: now, Status: domain.AlertRunRunning}
