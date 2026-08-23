@@ -13,7 +13,9 @@ curl -fsS -X POST http://127.0.0.1:8081/loker -H 'Content-Type: application/json
 
 Format opsional: `<posisi> | <skills> | <pengalaman> | <lokasi> | halal`. Field `halal` mengaktifkan penilaian model bisnis perusahaan oleh AI. Tanpa field tersebut, penilaian tidak dijalankan.
 
-Lalu balas: "Mencari lowongan di Kitalulus dan Dealls. Hasil akan dikirim ke chat kamu."
+Endpoint mengirim pesan "Mencari lowongan di Kitalulus dan Dealls. Hasil akan
+dikirim ke chat kamu." langsung ke messenger sebelum pencarian dimulai. Setelah
+`curl` berhasil, jangan ulangi pesan status tersebut; balas hanya `✅`.
 
 JANGAN gunakan web search. HANYA jalankan curl di atas.
 

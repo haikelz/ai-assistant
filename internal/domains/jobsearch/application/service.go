@@ -27,6 +27,16 @@ type Service struct {
 func NewService(sources []Source, assessor Assessor, messenger Messenger, logger *log.Logger) *Service {
 	return &Service{append([]Source(nil), sources...), assessor, messenger, logger}
 }
+
+const SearchAcknowledgement = "Mencari lowongan di Kitalulus dan Dealls. Hasil akan dikirim ke chat kamu."
+
+func (s *Service) AcknowledgeSearch(ctx context.Context) error {
+	if s.messenger == nil {
+		return nil
+	}
+	return s.messenger.Send(ctx, SearchAcknowledgement)
+}
+
 func (s *Service) Search(ctx context.Context, c domain.Criteria) (domain.Result, error) {
 	type fetched struct {
 		name string

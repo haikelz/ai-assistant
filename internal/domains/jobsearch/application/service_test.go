@@ -45,3 +45,14 @@ func TestServiceOrchestratesAndKeepsFailedSection(t *testing.T) {
 		t.Fatalf("called=%v message=%s", a.called, message)
 	}
 }
+
+func TestServiceSendsSearchAcknowledgement(t *testing.T) {
+	messenger := fakeMessenger{make(chan string, 1)}
+	service := NewService(nil, nil, messenger, nil)
+	if err := service.AcknowledgeSearch(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+	if message := <-messenger.ch; message != SearchAcknowledgement {
+		t.Fatalf("message=%q", message)
+	}
+}
