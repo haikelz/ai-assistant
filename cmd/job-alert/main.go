@@ -2,18 +2,23 @@ package main
 
 import (
 	"context"
+	"database/sql"
 	"flag"
 	"fmt"
 	"log"
 	"net/http"
 	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
 	"ai-assistant/internal/domains/jobsearch/application"
 	"ai-assistant/internal/domains/jobsearch/domain"
 	"ai-assistant/internal/domains/jobsearch/infrastructure"
+	"ai-assistant/internal/domains/jobsearch/infrastructure/persistence"
+	"ai-assistant/internal/domains/jobsearch/infrastructure/providers"
 	"ai-assistant/internal/platform/config"
+	_ "modernc.org/sqlite"
 )
 
 func main() {
@@ -39,7 +44,6 @@ func main() {
 		deliveries = append(deliveries, application.Delivery{Name: "email", Messenger: email})
 	}
 	messenger := application.NewMultiMessenger(deliveries, log.Default())
-	service := application.NewService([]application.Source{loggingSource{infrastructure.NewKitalulus(client, "")}, loggingSource{infrastructure.NewDealls(client, "")}}, assessor, messenger, log.Default())
 	criteria := domain.Criteria{Positions: split(*keywords), Skills: split(*skills), Locations: split(*location), MaxYears: domain.ParseMaxYears(*experience), Halal: *halal, Interactive: strings.TrimSpace(*keywords) != ""}
 	if *scheduled {
 		settings := application.NewSettingsService(infrastructure.NewJSONAlertConfigStore(cfg.JobAlertConfigPath))
@@ -50,7 +54,14 @@ func main() {
 		}
 		fmt.Fprintf(os.Stderr, "job-alert: scheduled criteria positions=%q skills=%q locations=%q max_years=%d halal=%t\n", criteria.Positions, criteria.Skills, criteria.Locations, criteria.MaxYears, criteria.Halal)
 	}
+	if *scheduled && cfg.JobAlertPipelineEnabled {
+		if err := runCurated(context.Background(), cfg, client, assessor, messenger, criteria, *dryRun); err != nil {
+			log.Fatal(err)
+		}
+		return
+	}
 
+	service := application.NewService([]application.Source{loggingSource{infrastructure.NewKitalulus(client, "")}, loggingSource{infrastructure.NewDealls(client, "")}}, assessor, messenger, log.Default())
 	fmt.Fprintln(os.Stderr, "job-alert: fetching")
 	result, err := service.Search(context.Background(), criteria)
 	if err != nil {
@@ -69,6 +80,41 @@ func main() {
 	if err := messenger.Send(context.Background(), message); err != nil {
 		log.Fatal(err)
 	}
+}
+
+func runCurated(ctx context.Context, cfg config.Config, client *http.Client, assessor *infrastructure.AIAssessor, messenger application.Messenger, criteria domain.Criteria, dryRun bool) error {
+	if err := os.MkdirAll(filepath.Dir(cfg.JobAlertDBPath), 0o700); err != nil {
+		return fmt.Errorf("create job-alert database directory: %w", err)
+	}
+	database, err := sql.Open("sqlite", cfg.JobAlertDBPath)
+	if err != nil {
+		return fmt.Errorf("open job-alert database: %w", err)
+	}
+	defer database.Close()
+	database.SetMaxOpenConns(1)
+	store := persistence.NewSQLiteJobStore(database)
+	if err := store.Initialize(ctx); err != nil {
+		return err
+	}
+
+	jobProviders := []application.JobProvider{providers.NewKitalulus(client, ""), providers.NewDealls(client, "")}
+	if cfg.GlintsEnabled {
+		jobProviders = append(jobProviders, providers.NewGlints(client, "", 2*time.Second))
+	}
+	if criteria.MinMatchScore <= 0 {
+		criteria.MinMatchScore = cfg.JobAlertMinMatchScore
+	}
+	ingestion := application.NewIngestionPipeline(application.NewSearchPlanner(cfg.JobAlertMaxQueries), jobProviders, store, 10*time.Second, 4, log.Default())
+	classifier := infrastructure.NewBatchClassifier(assessor, cfg.JobAlertBatchSize)
+	service := application.NewCuratedService(ingestion, classifier, application.NewMatchEngine(cfg.JobAlertMinMatchScore), store, messenger, log.Default())
+
+	fmt.Fprintf(os.Stderr, "job-alert: curated pipeline fetching providers=%d glints=%t dry_run=%t\n", len(jobProviders), cfg.GlintsEnabled, dryRun)
+	message, run, err := service.Run(ctx, criteria, !dryRun, !dryRun)
+	fmt.Fprintf(os.Stderr, "job-alert: run=%s status=%s fetched=%d new=%d updated=%d filtered=%d classified=%d matched=%d\n", run.ID, run.Status, run.JobsFetched, run.JobsNew, run.JobsUpdated, run.JobsFiltered, run.JobsClassified, run.JobsMatched)
+	if dryRun {
+		fmt.Println(message)
+	}
+	return err
 }
 
 func split(value string) []string {

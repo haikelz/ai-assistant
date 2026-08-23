@@ -19,3 +19,11 @@ func TestPreFilterAppliesCheapRulesBeforeAI(t *testing.T) {
 		t.Fatalf("filtered=%#v", filtered)
 	}
 }
+
+func TestPreFilterRetainsUnknownLocationForLaterAssessment(t *testing.T) {
+	job := domain.NormalizedJob{Title: "Software Engineer"}
+	filtered := (PreFilter{}).Apply([]domain.NormalizedJob{job}, domain.Criteria{Positions: []string{"Software Engineer"}, Locations: []string{"Jakarta"}})
+	if len(filtered) != 1 {
+		t.Fatalf("unknown location must not be treated as a known mismatch: %#v", filtered)
+	}
+}

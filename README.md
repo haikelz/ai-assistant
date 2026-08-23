@@ -81,7 +81,9 @@ The paycheck reminder runs at 09:00 Asia/Jakarta every 28th. `/downloadrecap` se
 
 ## Job Search (`/loker`)
 
-Search job listings from Kitalulus and Dealls with deterministic filtering.
+Interactive searches read Kitalulus and Dealls with deterministic filtering.
+The scheduled curated pipeline additionally reads public server-rendered Glints
+listings.
 
 ### Usage
 
@@ -108,7 +110,13 @@ Every result remains visible and receives one label: `Halal`, `Tidak Halal — <
 
 ### Daily cron
 
-Runs automatically at 03:00 Asia/Jakarta via `job-alert-scheduler` with halal labeling enabled. The daily run retrieves current listings from both active sources and limits output to 20 matching results per source.
+Runs automatically at 03:00 Asia/Jakarta via the in-pod
+`job-alert-scheduler`. The daily pipeline plans at most five search variations,
+fetches Glints, Kitalulus, and Dealls concurrently, normalizes their data, skips
+unchanged SQLite records, applies cheap deterministic filters, classifies jobs
+with AI in batches, calculates a hybrid match score, and sends one categorized
+digest. Every scheduled result gets `Halal`, `Tidak Halal`, or `Perlu Riset`;
+non-halal results remain visible.
 
 Configure its search criteria from Telegram with the same fields as `/loker`:
 
@@ -121,6 +129,25 @@ Position is required. Skills, experience, and location remain optional. Sending
 stored at `/root/.picoclaw/job-alert.json` on the existing persistent volume, so
 it survives pod restarts. Halal labeling is always enabled for scheduled runs,
 regardless of whether `halal` is included in the command.
+
+Pipeline controls (defaults shown):
+
+```dotenv
+JOB_ALERT_PIPELINE_ENABLED=true
+GLINTS_ENABLED=true
+JOB_ALERT_DB_PATH=/root/.picoclaw/jobs.db
+JOB_ALERT_MAX_QUERIES=5
+JOB_ALERT_AI_BATCH_SIZE=5
+JOB_ALERT_MIN_MATCH_SCORE=70
+```
+
+`jobs.db` is stored on the existing PVC. A new or changed listing continues to
+classification; an unchanged content hash only updates `last_seen_at` and is
+not sent again. `--dry-run` intentionally bypasses job deduplication so testing
+does not consume the next real alert. Set `GLINTS_ENABLED=false` if Glints
+changes layout or returns an access-control page. Set
+`JOB_ALERT_PIPELINE_ENABLED=false` to temporarily restore the legacy scheduled
+Kitalulus/Dealls output. These flags do not alter interactive `/loker`.
 
 ### WhatsApp Web delivery
 
@@ -175,29 +202,45 @@ sends are not retried automatically to avoid duplicate email.
 
 ### Data sources
 
-| Source    | Method            | Endpoint                         |
-| --------- | ----------------- | -------------------------------- |
-| Kitalulus | SSR HTML scraping | `https://kitalulus.com/lowongan` |
-| Dealls    | Next.js SSR data  | `https://dealls.com/loker`       |
+| Source    | Method                | Endpoint                                  |
+| --------- | --------------------- | ----------------------------------------- |
+| Glints    | Public SSR/JSON-LD    | `https://glints.com/id/en/lowongan-kerja` |
+| Kitalulus | SSR HTML parsing      | `https://kitalulus.com/lowongan`          |
+| Dealls    | Next.js SSR data      | `https://dealls.com/loker`                |
 
-Dealls exposes structured job data in its server-rendered Next.js pages. Kitalulus listings are parsed from server-rendered job cards.
+Glints parsing is bounded to public server-rendered content and stops on 401,
+403, 429, CAPTCHA, Cloudflare, or human-verification responses. It does not use
+browser fingerprint spoofing, CAPTCHA solving, proxies, or private APIs. Dealls
+exposes structured job data in its server-rendered Next.js pages. Kitalulus
+listings are parsed from server-rendered job cards.
 
 ### Filtering
 
-1. **Location** — substring match against Jabodetabek, Bandung, Surabaya, Bali, Batam, Solo, Salatiga, Karawang, Cikampek, Cikarang.
-2. **Experience** — `maxYearsExp` bound (default 3 years); jobs with `minYearsOfExperience > 3` are dropped.
-3. **Position and tech stack** — deterministic text matching against titles and available skill metadata. Listings without skill metadata are retained when their title matches.
-4. **Optional company assessment** — when `halal` is specified, the configured AI provider classifies unique companies after job filtering. The daily cron enables this automatically. This is an informational AI assessment, not a religious ruling.
+1. **Pre-filter** — role, excluded title keyword, strict work mode,
+   experience, minimum salary, and location are checked before AI calls.
+2. **AI batch assessment** — batches of 1–10 jobs receive relevance, seniority,
+   skill, summary, and conservative halal fields. Failed or incomplete AI
+   results fall back to `Perlu Riset` rather than inventing halal evidence.
+3. **Hybrid score** — AI relevance 35%, deterministic skill 30%, role 15%,
+   work mode 10%, salary 5%, and location 5%. The default digest threshold is
+   70%; scores of 85% or higher are recommendations utama.
+4. **Scheduled dedupe** — SHA-256 content hashes prevent unchanged jobs from
+   consuming AI tokens or appearing every day. Updated recruiter content is
+   reconsidered. Interactive `/loker` deliberately bypasses this history.
 
-Max 20 results per source.
+Interactive `/loker` returns at most 20 results per source.
 
 ### How `/loker` works
 
 ```
 Telegram /loker → PicoClaw job-search skill → Fiber POST :8081/loker
-                  → jobsearch application service
-                  → fetch Kitalulus + Dealls → filter → optional halal assessment
-                  → Telegram + optional WhatsApp Web
+                  → legacy interactive service (no historical dedupe)
+                  → Kitalulus + Dealls → Telegram + optional WhatsApp
+
+03:00 scheduler → search planner → Glints + Kitalulus + Dealls
+                → normalize → SQLite content-hash dedupe → pre-filter
+                → batched AI assessment → weighted hybrid score
+                → one digest → Telegram + optional WhatsApp + optional email
 ```
 
 ### Architecture

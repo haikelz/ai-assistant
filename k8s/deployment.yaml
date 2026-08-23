@@ -140,6 +140,36 @@ spec:
                 secretKeyRef:
                   name: ai-assistant-env
                   key: WHATSAPP_RECIPIENT
+            - name: JOB_ALERT_PIPELINE_ENABLED
+              valueFrom:
+                secretKeyRef:
+                  name: ai-assistant-env
+                  key: JOB_ALERT_PIPELINE_ENABLED
+            - name: GLINTS_ENABLED
+              valueFrom:
+                secretKeyRef:
+                  name: ai-assistant-env
+                  key: GLINTS_ENABLED
+            - name: JOB_ALERT_DB_PATH
+              valueFrom:
+                secretKeyRef:
+                  name: ai-assistant-env
+                  key: JOB_ALERT_DB_PATH
+            - name: JOB_ALERT_MAX_QUERIES
+              valueFrom:
+                secretKeyRef:
+                  name: ai-assistant-env
+                  key: JOB_ALERT_MAX_QUERIES
+            - name: JOB_ALERT_AI_BATCH_SIZE
+              valueFrom:
+                secretKeyRef:
+                  name: ai-assistant-env
+                  key: JOB_ALERT_AI_BATCH_SIZE
+            - name: JOB_ALERT_MIN_MATCH_SCORE
+              valueFrom:
+                secretKeyRef:
+                  name: ai-assistant-env
+                  key: JOB_ALERT_MIN_MATCH_SCORE
             - name: MAIL_MAILER
               valueFrom:
                 secretKeyRef:

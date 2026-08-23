@@ -9,7 +9,7 @@ import (
 	"ai-assistant/internal/domains/jobsearch/domain"
 )
 
-const classificationInstructions = `Classify each supplied job. Return ONLY a JSON object with key "jobs" containing one result per job_id. Fields: job_id, category, seniority, relevance_score (0-100), skill_match_score (0-100), matched_skills, missing_skills, summary (one short Indonesian sentence), halal_status (halal|tidak_halal|perlu_riset), halal_reason. Relevance measures fit to the supplied criteria. Use perlu_riset when company business evidence is insufficient. Never fabricate evidence.`
+const classificationInstructions = `Classify each supplied job. Return ONLY a JSON object with key "jobs" containing one result per job_id. Fields: job_id, category, seniority, relevance_score (0-100), skill_match_score (0-100), matched_skills, missing_skills, summary (one short Indonesian sentence), halal_status (halal|tidak_halal|perlu_riset), halal_reason. Relevance measures fit to the supplied criteria. For halal_status, mark tidak_halal when the company's primary business produces or sells prohibited goods/services, depends on interest-bearing (ribawi) finance, or is a bank, insurer, or online lender. Use perlu_riset when reliable business evidence is insufficient. Do not hide non-halal jobs and never fabricate evidence.`
 
 type BatchClassifier struct {
 	assessor  *AIAssessor
