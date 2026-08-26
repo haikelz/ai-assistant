@@ -21,3 +21,12 @@ commands pass until the migration supplies the target layout.
 Never expose `.env`, provider credentials, tokens, local databases, or finance
 workbooks. Preserve existing behavior unless an accepted story/decision changes
 it; use fakes and dry runs instead of live provider traffic.
+
+<!-- AI-GUIDELINES:BEGIN -->
+## AI Engineering Guidelines
+
+Read `.agents/general.md` for every task. Read only the applicable companion guidelines below; repository-local contracts and instructions remain authoritative.
+
+- `.agents/guidelines/go.md`
+- `.agents/guidelines/docker.md`
+<!-- AI-GUIDELINES:END -->
