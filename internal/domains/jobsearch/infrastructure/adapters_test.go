@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"ai-assistant/internal/domains/jobsearch/domain"
@@ -67,5 +68,46 @@ func TestAIAssessorUsesGeminiEndpoint(t *testing.T) {
 	jobs, err := NewAIAssessor(server.Client(), Config{Provider: "google", Model: "gemini-dynamic", GoogleAPIKey: "google-key", GoogleURL: server.URL}).Assess(t.Context(), []domain.Job{{Company: "A"}})
 	if err != nil || jobs[0].HalalStatus != domain.HalalStatusNotHalal {
 		t.Fatalf("jobs=%#v err=%v", jobs, err)
+	}
+}
+
+func TestAIAssessorRejectsMalformedProviderEndpoint(t *testing.T) {
+	assessor := NewAIAssessor(nil, Config{Provider: "sumopod", Model: "gpt-test", SumopodAPIKey: "key", SumopodURL: "://invalid"})
+	_, err := assessor.Assess(t.Context(), []domain.Job{{Company: "A"}})
+	if err == nil || !strings.Contains(err.Error(), "create sumopod assessment request") {
+		t.Fatalf("error=%v", err)
+	}
+}
+
+func TestAIAssessorOrdersCompaniesDeterministically(t *testing.T) {
+	requestInputs := make(chan string, 1)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var request struct {
+			Input string `json:"input"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+			requestInputs <- "decode error: " + err.Error()
+			http.Error(w, "invalid request", http.StatusBadRequest)
+			return
+		}
+		requestInputs <- request.Input
+		if _, err := fmt.Fprint(w, `{"output":[{"content":[{"text":"[]"}]}]}`); err != nil {
+			return
+		}
+	}))
+	defer server.Close()
+	assessor := NewAIAssessor(server.Client(), Config{Provider: "sumopod", Model: "gpt-test", SumopodAPIKey: "key", SumopodURL: server.URL})
+	if _, err := assessor.Assess(t.Context(), []domain.Job{{Company: "Z Company"}, {Company: "A Company"}}); err != nil {
+		t.Fatal(err)
+	}
+	if input := <-requestInputs; !strings.HasPrefix(input, `[{"company":"A Company"`) {
+		t.Fatalf("input=%s", input)
+	}
+}
+
+func TestTelegramRejectsMalformedEndpoint(t *testing.T) {
+	err := NewTelegram(nil, "token", "user", "://invalid").Send(t.Context(), "message")
+	if err == nil || !strings.Contains(err.Error(), "create Telegram request") {
+		t.Fatalf("error=%v", err)
 	}
 }

@@ -29,6 +29,7 @@ type Container struct {
 	DB                       *sql.DB
 	WhatsApp                 *jobinfra.WhatsAppGateway
 	FinanceApp, JobSearchApp *fiber.App
+	jobSearchHandler         *jobd.Handler
 }
 
 func NewContainer(ctx context.Context, cfg config.Config) (*Container, error) {
@@ -40,13 +41,11 @@ func NewContainer(ctx context.Context, cfg config.Config) (*Container, error) {
 		return nil, fmt.Errorf("open finance database: %w", err)
 	}
 	if err := financeinfra.InitializeDatabase(db); err != nil {
-		db.Close()
-		return nil, fmt.Errorf("initialize finance database: %w", err)
+		return nil, errors.Join(fmt.Errorf("initialize finance database: %w", err), closeDatabase(db))
 	}
 	syncer, err := financeinfra.NewGoogleSheetsSyncer(ctx, cfg.SpreadsheetID, cfg.ServiceAccountBase64)
 	if err != nil {
-		db.Close()
-		return nil, fmt.Errorf("configure Google Sheets: %w", err)
+		return nil, errors.Join(fmt.Errorf("configure Google Sheets: %w", err), closeDatabase(db))
 	}
 	client := &http.Client{Timeout: 120 * time.Second}
 	financeService := financeapp.NewService(financeinfra.NewSQLiteRepository(db), syncer)
@@ -61,7 +60,9 @@ func NewContainer(ctx context.Context, cfg config.Config) (*Container, error) {
 		} else if gateway, gatewayErr := jobinfra.NewWhatsAppGateway(ctx, cfg.WhatsAppSessionPath, os.Stdout); gatewayErr != nil {
 			log.Printf("whatsapp: disabled: %v", gatewayErr)
 		} else if adapter, adapterErr := jobinfra.NewWhatsApp(gateway, cfg.WhatsAppRecipient); adapterErr != nil {
-			_ = gateway.Close()
+			if closeErr := gateway.Close(); closeErr != nil {
+				log.Printf("whatsapp: close disabled gateway: %v", closeErr)
+			}
 			log.Printf("whatsapp: disabled: %v", adapterErr)
 		} else {
 			whatsAppGateway = gateway
@@ -77,10 +78,19 @@ func NewContainer(ctx context.Context, cfg config.Config) (*Container, error) {
 	aid.NewHandler(proxy).Register(mainAPI)
 	jobAPI := newFiber()
 	jobAPI.Get("/health", func(c *fiber.Ctx) error { return c.SendStatus(fiber.StatusNoContent) })
-	jobd.NewHandler(jobService).Register(jobAPI)
+	jobSearchHandler, err := jobd.NewHandler(ctx, jobService, log.Default())
+	if err != nil {
+		var cleanupErrors []error
+		if whatsAppGateway != nil {
+			cleanupErrors = append(cleanupErrors, whatsAppGateway.Close())
+		}
+		cleanupErrors = append(cleanupErrors, db.Close())
+		return nil, errors.Join(fmt.Errorf("configure job-search handler: %w", err), errors.Join(cleanupErrors...))
+	}
+	jobSearchHandler.Register(jobAPI)
 	jobd.NewSettingsHandler(settingsService).Register(jobAPI)
 	jobd.NewWhatsAppHandler(whatsAppMessenger).Register(jobAPI)
-	return &Container{Config: cfg, DB: db, WhatsApp: whatsAppGateway, FinanceApp: mainAPI, JobSearchApp: jobAPI}, nil
+	return &Container{Config: cfg, DB: db, WhatsApp: whatsAppGateway, FinanceApp: mainAPI, JobSearchApp: jobAPI, jobSearchHandler: jobSearchHandler}, nil
 }
 
 func interactiveJobDeliveries(telegram jobapp.Messenger) []jobapp.Delivery {
@@ -92,6 +102,11 @@ func newFiber() *fiber.App {
 }
 func (c *Container) Close() error {
 	var closeErrors []error
+	if c.jobSearchHandler != nil {
+		ctx, cancel := context.WithTimeout(context.Background(), shutdownTimeout)
+		closeErrors = append(closeErrors, c.jobSearchHandler.Shutdown(ctx))
+		cancel()
+	}
 	if c.WhatsApp != nil {
 		closeErrors = append(closeErrors, c.WhatsApp.Close())
 	}
@@ -99,4 +114,11 @@ func (c *Container) Close() error {
 		closeErrors = append(closeErrors, c.DB.Close())
 	}
 	return errors.Join(closeErrors...)
+}
+
+func closeDatabase(db *sql.DB) error {
+	if err := db.Close(); err != nil {
+		return fmt.Errorf("close database: %w", err)
+	}
+	return nil
 }

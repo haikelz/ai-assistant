@@ -4,8 +4,8 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
-	"io"
 	"net/http"
 	"strings"
 )
@@ -34,12 +34,11 @@ func (w *LocalWhatsApp) Send(ctx context.Context, message string) error {
 	request.Header.Set("Content-Type", "application/json")
 	response, err := w.client.Do(request)
 	if err != nil {
-		return err
+		return fmt.Errorf("send local WhatsApp message: %w", err)
 	}
-	defer response.Body.Close()
+	responseBody, readErr := readAndCloseResponse(response, 4<<10)
 	if response.StatusCode != http.StatusNoContent {
-		responseBody, _ := io.ReadAll(io.LimitReader(response.Body, 4096))
-		return fmt.Errorf("local WhatsApp status %d: %s", response.StatusCode, strings.TrimSpace(string(responseBody)))
+		return errors.Join(fmt.Errorf("local WhatsApp status %d: %s", response.StatusCode, strings.TrimSpace(string(responseBody))), readErr)
 	}
-	return nil
+	return readErr
 }

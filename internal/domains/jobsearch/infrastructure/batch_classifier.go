@@ -41,7 +41,10 @@ func (b *BatchClassifier) Classify(ctx context.Context, jobs []domain.Normalized
 		for _, job := range jobs[start:end] {
 			requestJobs = append(requestJobs, map[string]any{"job_id": job.ID, "title": job.Title, "company": job.Company, "description": job.Description, "city": job.City, "work_mode": job.WorkMode, "salary_min": job.SalaryMin, "salary_max": job.SalaryMax, "min_years_exp": job.MinYearsExp, "skills": job.Skills})
 		}
-		input, _ := json.Marshal(map[string]any{"criteria": criteriaJSON, "jobs": requestJobs})
+		input, err := json.Marshal(map[string]any{"criteria": criteriaJSON, "jobs": requestJobs})
+		if err != nil {
+			return append(result, fallbackClassifications(jobs[start:])...), fmt.Errorf("encode jobs for classification: %w", err)
+		}
 		text, err := b.assessor.request(ctx, classificationInstructions, string(input))
 		if err != nil {
 			return append(result, fallbackClassifications(jobs[start:])...), err

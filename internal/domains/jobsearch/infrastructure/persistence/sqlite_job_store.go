@@ -47,12 +47,15 @@ func (s *SQLiteJobStore) Initialize(ctx context.Context) error {
 func (s *SQLiteJobStore) Upsert(ctx context.Context, job domain.NormalizedJob) (domain.UpsertOutcome, error) {
 	var existingHash string
 	var firstSeen time.Time
-	err := s.db.QueryRowContext(ctx, `SELECT content_hash, first_seen_at FROM jobs WHERE source = ? AND external_id = ?`, job.Source, job.ExternalID).Scan(&existingHash, &firstSeen)
-	if err != nil && !errors.Is(err, sql.ErrNoRows) {
-		return "", fmt.Errorf("lookup job: %w", err)
+	lookupErr := s.db.QueryRowContext(ctx, `SELECT content_hash, first_seen_at FROM jobs WHERE source = ? AND external_id = ?`, job.Source, job.ExternalID).Scan(&existingHash, &firstSeen)
+	if lookupErr != nil && !errors.Is(lookupErr, sql.ErrNoRows) {
+		return "", fmt.Errorf("lookup job: %w", lookupErr)
 	}
-	skills, _ := json.Marshal(job.Skills)
-	if errors.Is(err, sql.ErrNoRows) {
+	skills, err := json.Marshal(job.Skills)
+	if err != nil {
+		return "", fmt.Errorf("encode job skills: %w", err)
+	}
+	if errors.Is(lookupErr, sql.ErrNoRows) {
 		_, err = s.db.ExecContext(ctx, `INSERT INTO jobs
             (id, source, external_id, canonical_url, title, normalized_title, company, description, city, work_mode, salary_min, salary_max, salary_currency, min_years_exp, max_years_exp, skills, employment_type, content_hash, source_published_at, first_seen_at, last_seen_at)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,

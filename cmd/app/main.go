@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"log"
 	"os/signal"
 	"syscall"
@@ -11,14 +12,18 @@ import (
 )
 
 func main() {
+	if err := run(); err != nil {
+		log.Fatal(err)
+	}
+}
+
+func run() (runErr error) {
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 	container, err := app.NewContainer(ctx, config.Load())
 	if err != nil {
-		log.Fatal(err)
+		return err
 	}
-	defer container.Close()
-	if err := container.Run(ctx); err != nil {
-		log.Fatal(err)
-	}
+	defer func() { runErr = errors.Join(runErr, container.Close()) }()
+	return container.Run(ctx)
 }
