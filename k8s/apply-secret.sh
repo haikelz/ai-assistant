@@ -56,7 +56,7 @@ set -- kubectl create secret generic ai-assistant-env \
   --from-literal=JOB_ALERT_DB_PATH="${JOB_ALERT_DB_PATH:-/root/.picoclaw/jobs.db}" \
   --from-literal=JOB_ALERT_MAX_QUERIES="${JOB_ALERT_MAX_QUERIES:-5}" \
   --from-literal=JOB_ALERT_AI_BATCH_SIZE="${JOB_ALERT_AI_BATCH_SIZE:-5}" \
-  --from-literal=JOB_ALERT_MIN_MATCH_SCORE="${JOB_ALERT_MIN_MATCH_SCORE:-70}" \
+  --from-literal=JOB_ALERT_MIN_MATCH_SCORE="${JOB_ALERT_MIN_MATCH_SCORE:-1}" \
   --from-literal=MAIL_MAILER="${MAIL_MAILER:-}" \
   --from-literal=MAIL_USERNAME="${MAIL_USERNAME:-}" \
   --from-literal=MAIL_PASSWORD="${MAIL_PASSWORD:-}" \

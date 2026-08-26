@@ -29,8 +29,8 @@ in-pod scheduler remains the owner of scheduled execution.
       experience, salary, and location rules before AI classification.
 - [x] AI classification is batched and produces relevance, skill, seniority,
       summary, and halal fields with conservative fallback values.
-- [x] Hybrid scoring uses the documented 35/30/15/10/5/5 weights and a default
-      threshold of 70.
+- [x] Hybrid scoring uses the documented 35/30/15/10/5/5 weights and the
+      configured threshold (default 1).
 - [x] Telegram, WhatsApp, and email receive one categorized digest.
 - [x] Tests use temporary SQLite, fixtures, and fake AI/provider clients only.
 

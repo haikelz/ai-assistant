@@ -39,3 +39,10 @@ func TestLoadReadsCuratedJobAlertConfiguration(t *testing.T) {
 		t.Fatalf("curated job-alert config=%#v", config)
 	}
 }
+
+func TestLoadDefaultsJobAlertMatchScoreToOne(t *testing.T) {
+	t.Setenv("JOB_ALERT_MIN_MATCH_SCORE", "")
+	if config := Load(); config.JobAlertMinMatchScore != 1 {
+		t.Fatalf("JOB_ALERT_MIN_MATCH_SCORE=%v, expected 1", config.JobAlertMinMatchScore)
+	}
+}

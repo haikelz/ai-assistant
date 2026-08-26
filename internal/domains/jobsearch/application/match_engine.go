@@ -11,7 +11,7 @@ type MatchEngine struct{ threshold float64 }
 
 func NewMatchEngine(threshold float64) *MatchEngine {
 	if threshold <= 0 {
-		threshold = 70
+		threshold = 1
 	}
 	return &MatchEngine{threshold: threshold}
 }

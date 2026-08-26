@@ -18,3 +18,11 @@ func TestMatchEngineUsesDocumentedWeightsAndThreshold(t *testing.T) {
 		t.Fatalf("threshold did not exclude result: %#v", results)
 	}
 }
+
+func TestMatchEngineDefaultsThresholdToOne(t *testing.T) {
+	job := domain.NormalizedJob{ID: "1", Title: "Unrelated role"}
+	results := NewMatchEngine(0).Rank([]domain.NormalizedJob{job}, []domain.Classification{{JobID: "1", AIRelevance: 10}}, domain.Criteria{Positions: []string{"Software Engineer"}})
+	if len(results) != 1 {
+		t.Fatalf("default threshold should retain score above 1: %#v", results)
+	}
+}

@@ -26,7 +26,7 @@ type Config struct {
 func Load() Config {
 	return Config{
 		FinanceAddress: getenv("FINANCE_ADDR", "127.0.0.1:8080"), JobSearchAddress: getenv("LOKER_ADDR", "127.0.0.1:8081"), DatabasePath: getenv("FINANCE_DB_PATH", "/root/.picoclaw/finance.db"), JobAlertConfigPath: getenv("JOB_ALERT_CONFIG_PATH", "/root/.picoclaw/job-alert.json"),
-		JobAlertDBPath: getenv("JOB_ALERT_DB_PATH", "/root/.picoclaw/jobs.db"), JobAlertPipelineEnabled: getenvBool("JOB_ALERT_PIPELINE_ENABLED", true), GlintsEnabled: getenvBool("GLINTS_ENABLED", true), JobAlertMaxQueries: getenvInt("JOB_ALERT_MAX_QUERIES", 5), JobAlertBatchSize: getenvInt("JOB_ALERT_AI_BATCH_SIZE", 5), JobAlertMinMatchScore: getenvFloat("JOB_ALERT_MIN_MATCH_SCORE", 70),
+		JobAlertDBPath: getenv("JOB_ALERT_DB_PATH", "/root/.picoclaw/jobs.db"), JobAlertPipelineEnabled: getenvBool("JOB_ALERT_PIPELINE_ENABLED", true), GlintsEnabled: getenvBool("GLINTS_ENABLED", true), JobAlertMaxQueries: getenvInt("JOB_ALERT_MAX_QUERIES", 5), JobAlertBatchSize: getenvInt("JOB_ALERT_AI_BATCH_SIZE", 5), JobAlertMinMatchScore: getenvFloat("JOB_ALERT_MIN_MATCH_SCORE", 1),
 		WhatsAppSessionPath: getenv("WHATSAPP_SESSION_PATH", "/root/.picoclaw/whatsapp.db"), WhatsAppGatewayURL: getenv("WHATSAPP_GATEWAY_URL", "http://127.0.0.1:8081/internal/whatsapp/send"),
 		SumopodResponsesURL: getenv("SUMOPOD_RESPONSES_URL", "https://ai.sumopod.com/v1/responses"), AIProvider: getenv("AI_PROVIDER", "sumopod"), AIModel: strings.TrimSpace(os.Getenv("AI_MODEL")),
 		SumopodAPIKey: strings.TrimSpace(os.Getenv("SUMOPOD_API_KEY")), OpenAIAPIKey: strings.TrimSpace(os.Getenv("OPENAI_API_KEY")), GoogleAPIKey: strings.TrimSpace(os.Getenv("GOOGLE_API_KEY")),

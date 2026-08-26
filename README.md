@@ -138,14 +138,16 @@ GLINTS_ENABLED=true
 JOB_ALERT_DB_PATH=/root/.picoclaw/jobs.db
 JOB_ALERT_MAX_QUERIES=5
 JOB_ALERT_AI_BATCH_SIZE=5
-JOB_ALERT_MIN_MATCH_SCORE=70
+JOB_ALERT_MIN_MATCH_SCORE=1
 ```
 
 `jobs.db` is stored on the existing PVC. A new or changed listing continues to
 classification; an unchanged content hash only updates `last_seen_at` and is
-not sent again. `--dry-run` intentionally bypasses job deduplication so testing
-does not consume the next real alert. Set `GLINTS_ENABLED=false` if Glints
-changes layout or returns an access-control page. Set
+not sent again. The default score of `1` includes nearly every listing that
+passes the deterministic pre-filter; increase it when a smaller, more curated
+digest is preferred. `--dry-run` intentionally bypasses job deduplication so
+testing does not consume the next real alert. Set `GLINTS_ENABLED=false` if
+Glints changes layout or returns an access-control page. Set
 `JOB_ALERT_PIPELINE_ENABLED=false` to temporarily restore the legacy scheduled
 Kitalulus/Dealls output. These flags do not alter interactive `/loker`.
 
