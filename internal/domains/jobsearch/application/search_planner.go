@@ -23,7 +23,7 @@ func (p *SearchPlanner) Plan(criteria domain.Criteria) []domain.SearchQuery {
 		key := strings.ToLower(keyword + "|" + location)
 		if keyword != "" && !seen[key] && len(queries) < p.maxQueries {
 			seen[key] = true
-			queries = append(queries, domain.SearchQuery{Keyword: keyword, Location: location})
+			queries = append(queries, domain.SearchQuery{Keyword: keyword, Location: location, MaxYears: criteria.MaxYears, WorkModes: append([]domain.WorkMode(nil), criteria.WorkModes...)})
 		}
 	}
 	location := ""

@@ -19,6 +19,7 @@ import (
 	jobapp "ai-assistant/internal/domains/jobsearch/application"
 	jobd "ai-assistant/internal/domains/jobsearch/delivery/http"
 	jobinfra "ai-assistant/internal/domains/jobsearch/infrastructure"
+	jobproviders "ai-assistant/internal/domains/jobsearch/infrastructure/providers"
 	"ai-assistant/internal/platform/config"
 	"github.com/gofiber/fiber/v2"
 	_ "modernc.org/sqlite"
@@ -52,6 +53,14 @@ func NewContainer(ctx context.Context, cfg config.Config) (*Container, error) {
 	proxy := aiinfra.NewSumopodProxy(client, cfg.SumopodResponsesURL)
 	assessor := jobinfra.NewAIAssessor(client, jobinfra.Config{Provider: cfg.AIProvider, Model: cfg.AIModel, SumopodAPIKey: cfg.SumopodAPIKey, OpenAIAPIKey: cfg.OpenAIAPIKey, GoogleAPIKey: cfg.GoogleAPIKey, SumopodURL: cfg.SumopodResponsesURL, OpenAIURL: cfg.OpenAIResponsesURL, GoogleURL: cfg.GoogleGenerativeURL})
 	telegram := jobinfra.NewTelegram(client, cfg.TelegramBotToken, cfg.TelegramUserID, "")
+	jobSources := []jobapp.Source{jobinfra.NewKitalulus(client, ""), jobinfra.NewDealls(client, "")}
+	if cfg.LinkedInEnabled {
+		linkedIn, linkedInErr := newLinkedInProvider(client, cfg)
+		if linkedInErr != nil {
+			return nil, errors.Join(fmt.Errorf("configure LinkedIn: %w", linkedInErr), closeDatabase(db))
+		}
+		jobSources = append(jobSources, linkedIn)
+	}
 	var whatsAppGateway *jobinfra.WhatsAppGateway
 	var whatsAppMessenger *jobinfra.WhatsApp
 	if cfg.WhatsAppRecipient != "" {
@@ -70,7 +79,7 @@ func NewContainer(ctx context.Context, cfg config.Config) (*Container, error) {
 		}
 	}
 	messenger := jobapp.NewMultiMessenger(interactiveJobDeliveries(telegram), log.Default())
-	jobService := jobapp.NewService([]jobapp.Source{jobinfra.NewKitalulus(client, ""), jobinfra.NewDealls(client, "")}, assessor, messenger, log.Default())
+	jobService := jobapp.NewService(jobSources, assessor, messenger, log.Default())
 	settingsService := jobapp.NewSettingsService(jobinfra.NewJSONAlertConfigStore(cfg.JobAlertConfigPath))
 
 	mainAPI := newFiber()
@@ -91,6 +100,14 @@ func NewContainer(ctx context.Context, cfg config.Config) (*Container, error) {
 	jobd.NewSettingsHandler(settingsService).Register(jobAPI)
 	jobd.NewWhatsAppHandler(whatsAppMessenger).Register(jobAPI)
 	return &Container{Config: cfg, DB: db, WhatsApp: whatsAppGateway, FinanceApp: mainAPI, JobSearchApp: jobAPI, jobSearchHandler: jobSearchHandler}, nil
+}
+
+func newLinkedInProvider(client *http.Client, cfg config.Config) (*jobproviders.LinkedIn, error) {
+	return jobproviders.NewLinkedIn(client, jobproviders.LinkedInConfig{
+		Pages: cfg.LinkedInPages, MaxDetails: cfg.LinkedInMaxDetails, MaxQueries: cfg.JobAlertMaxQueries,
+		Distance: cfg.LinkedInDistance, PostedWithin: time.Duration(cfg.LinkedInPostedWithinHours) * time.Hour,
+		MinInterval: 500 * time.Millisecond, JobTypes: cfg.LinkedInJobTypes, CompanyIDs: cfg.LinkedInCompanyIDs,
+	})
 }
 
 func interactiveJobDeliveries(telegram jobapp.Messenger) []jobapp.Delivery {

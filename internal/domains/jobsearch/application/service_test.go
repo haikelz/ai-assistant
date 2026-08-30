@@ -56,3 +56,25 @@ func TestServiceSendsSearchAcknowledgement(t *testing.T) {
 		t.Fatalf("message=%q", message)
 	}
 }
+
+func TestServiceAcknowledgementNamesEnabledLinkedInSource(t *testing.T) {
+	messenger := fakeMessenger{make(chan string, 1)}
+	service := NewService([]Source{fakeSource{name: "kitalulus"}, fakeSource{name: "dealls"}, fakeSource{name: "linkedin"}}, nil, messenger, nil)
+	if err := service.AcknowledgeSearch(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+	if message := <-messenger.ch; message != "Mencari lowongan di Kitalulus, Dealls, dan LinkedIn. Hasil akan dikirim ke chat kamu." {
+		t.Fatalf("message=%q", message)
+	}
+}
+
+func TestServiceKeepsPartialLinkedInResults(t *testing.T) {
+	service := NewService([]Source{fakeSource{name: "linkedin", jobs: []domain.Job{{Title: "Software Engineer", Source: "linkedin"}}, err: domain.ErrProviderBlocked}}, nil, nil, nil)
+	result, err := service.Search(t.Context(), domain.Criteria{Positions: []string{"Software Engineer"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !result.LinkedInIncluded || len(result.LinkedIn) != 1 {
+		t.Fatalf("result=%#v", result)
+	}
+}

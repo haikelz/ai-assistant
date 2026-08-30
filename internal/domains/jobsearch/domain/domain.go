@@ -42,7 +42,11 @@ type Criteria struct {
 	Interactive     bool       `json:"interactive,omitempty"`
 }
 
-type Result struct{ Kitalulus, Dealls []Job }
+type Result struct {
+	Kitalulus, Dealls []Job
+	LinkedIn          []Job
+	LinkedInIncluded  bool
+}
 
 type AlertConfig struct {
 	Query     string    `json:"query"`
@@ -145,6 +149,9 @@ func FormatMessage(greeting string, result Result) string {
 	b.WriteString(greeting + "\n\nDaftar Job Terbaru:\n\n")
 	writeSection(&b, "A. Kitalulus", result.Kitalulus)
 	writeSection(&b, "B. Dealls", result.Dealls)
+	if result.LinkedInIncluded {
+		writeSection(&b, "C. LinkedIn", result.LinkedIn)
+	}
 	b.WriteString("\n— Dikirim otomatis oleh Job Alert Bot")
 	return b.String()
 }

@@ -150,6 +150,41 @@ spec:
                 secretKeyRef:
                   name: ai-assistant-env
                   key: GLINTS_ENABLED
+            - name: LINKEDIN_ENABLED
+              valueFrom:
+                secretKeyRef:
+                  name: ai-assistant-env
+                  key: LINKEDIN_ENABLED
+            - name: LINKEDIN_PAGES
+              valueFrom:
+                secretKeyRef:
+                  name: ai-assistant-env
+                  key: LINKEDIN_PAGES
+            - name: LINKEDIN_MAX_DETAILS
+              valueFrom:
+                secretKeyRef:
+                  name: ai-assistant-env
+                  key: LINKEDIN_MAX_DETAILS
+            - name: LINKEDIN_POSTED_WITHIN_HOURS
+              valueFrom:
+                secretKeyRef:
+                  name: ai-assistant-env
+                  key: LINKEDIN_POSTED_WITHIN_HOURS
+            - name: LINKEDIN_DISTANCE
+              valueFrom:
+                secretKeyRef:
+                  name: ai-assistant-env
+                  key: LINKEDIN_DISTANCE
+            - name: LINKEDIN_JOB_TYPES
+              valueFrom:
+                secretKeyRef:
+                  name: ai-assistant-env
+                  key: LINKEDIN_JOB_TYPES
+            - name: LINKEDIN_COMPANY_IDS
+              valueFrom:
+                secretKeyRef:
+                  name: ai-assistant-env
+                  key: LINKEDIN_COMPANY_IDS
             - name: JOB_ALERT_DB_PATH
               valueFrom:
                 secretKeyRef:

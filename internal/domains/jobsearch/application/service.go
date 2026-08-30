@@ -1,10 +1,12 @@
 package application
 
 import (
-	"ai-assistant/internal/domains/jobsearch/domain"
 	"context"
 	"log"
+	"strings"
 	"sync"
+
+	"ai-assistant/internal/domains/jobsearch/domain"
 )
 
 type Source interface {
@@ -34,7 +36,38 @@ func (s *Service) AcknowledgeSearch(ctx context.Context) error {
 	if s.messenger == nil {
 		return nil
 	}
-	return s.messenger.Send(ctx, SearchAcknowledgement)
+	return s.messenger.Send(ctx, s.searchAcknowledgement())
+}
+
+func (s *Service) searchAcknowledgement() string {
+	names := make([]string, 0, len(s.sources))
+	for _, source := range s.sources {
+		switch source.Name() {
+		case "kitalulus":
+			names = append(names, "Kitalulus")
+		case "dealls":
+			names = append(names, "Dealls")
+		case "linkedin":
+			names = append(names, "LinkedIn")
+		}
+	}
+	if len(names) == 0 {
+		return SearchAcknowledgement
+	}
+	return "Mencari lowongan di " + joinIndonesian(names) + ". Hasil akan dikirim ke chat kamu."
+}
+
+func joinIndonesian(values []string) string {
+	switch len(values) {
+	case 0:
+		return ""
+	case 1:
+		return values[0]
+	case 2:
+		return values[0] + " dan " + values[1]
+	default:
+		return strings.Join(values[:len(values)-1], ", ") + ", dan " + values[len(values)-1]
+	}
 }
 
 func (s *Service) Search(ctx context.Context, c domain.Criteria) (domain.Result, error) {
@@ -53,7 +86,9 @@ func (s *Service) Search(ctx context.Context, c domain.Criteria) (domain.Result,
 				if s.logger != nil {
 					s.logger.Printf("jobsearch: %s fetch: %v", src.Name(), err)
 				}
-				jobs = nil
+				if len(jobs) == 0 {
+					jobs = nil
+				}
 			}
 			ch <- fetched{src.Name(), domain.FilterAndSort(jobs, c, 20)}
 		}(src)
@@ -67,24 +102,30 @@ func (s *Service) Search(ctx context.Context, c domain.Criteria) (domain.Result,
 			r.Kitalulus = f.jobs
 		case "dealls":
 			r.Dealls = f.jobs
+		case "linkedin":
+			r.LinkedIn = f.jobs
+			r.LinkedInIncluded = true
 		}
 	}
 	if c.Halal && s.assessor != nil {
-		all := append(append([]domain.Job{}, r.Kitalulus...), r.Dealls...)
+		kitalulusCount, deallsCount := len(r.Kitalulus), len(r.Dealls)
+		all := append(append(append([]domain.Job{}, r.Kitalulus...), r.Dealls...), r.LinkedIn...)
 		for i := range all {
 			all[i].HalalStatus = domain.HalalStatusNeedsReview
 		}
-		copy(r.Kitalulus, all)
-		copy(r.Dealls, all[len(r.Kitalulus):])
+		copy(r.Kitalulus, all[:kitalulusCount])
+		copy(r.Dealls, all[kitalulusCount:kitalulusCount+deallsCount])
+		copy(r.LinkedIn, all[kitalulusCount+deallsCount:])
 		assessed, err := s.assessor.Assess(ctx, all)
 		if err != nil {
 			if s.logger != nil {
 				s.logger.Printf("jobsearch: assessment: %v", err)
 			}
 		} else {
-			copy(r.Kitalulus, assessed)
-			if len(assessed) >= len(r.Kitalulus) {
-				copy(r.Dealls, assessed[len(r.Kitalulus):])
+			if len(assessed) == len(all) {
+				copy(r.Kitalulus, assessed[:kitalulusCount])
+				copy(r.Dealls, assessed[kitalulusCount:kitalulusCount+deallsCount])
+				copy(r.LinkedIn, assessed[kitalulusCount+deallsCount:])
 			}
 		}
 	}

@@ -48,3 +48,15 @@ func TestIngestionPipelineIsolatesProvidersAndSkipsUnchangedJobs(t *testing.T) {
 		t.Fatalf("result=%#v", result)
 	}
 }
+
+func TestIngestionPipelineKeepsPartialJobsFromFailedProvider(t *testing.T) {
+	provider := pipelineProvider{source: "linkedin", jobs: []domain.RawJob{{Source: "linkedin", ExternalID: "1", URL: "https://example/1", Title: "Software Engineer"}}, err: errors.New("blocked after first page")}
+	pipeline := NewIngestionPipeline(NewSearchPlanner(1), []JobProvider{provider}, nil, time.Second, 1, nil)
+	result, err := pipeline.Run(t.Context(), domain.Criteria{Positions: []string{"Software Engineer"}}, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.Fetched != 1 || len(result.Jobs) != 1 || result.Jobs[0].Source != "linkedin" {
+		t.Fatalf("result=%#v", result)
+	}
+}

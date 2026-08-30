@@ -19,6 +19,10 @@ func TestParseFilterFormatAndSplit(t *testing.T) {
 	if !strings.Contains(message, "A. Kitalulus") || !strings.Contains(message, "B. Dealls") {
 		t.Fatal(message)
 	}
+	linkedInMessage := FormatMessage("Hasil", Result{LinkedInIncluded: true, LinkedIn: got})
+	if !strings.Contains(linkedInMessage, "C. LinkedIn") {
+		t.Fatal(linkedInMessage)
+	}
 	long := strings.Repeat("lowongan kerja\n", 400)
 	chunks := SplitTelegramMessage(long, 4000)
 	if strings.Join(chunks, "") != long {

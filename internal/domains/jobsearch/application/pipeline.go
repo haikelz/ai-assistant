@@ -94,7 +94,9 @@ func (p *IngestionPipeline) Run(ctx context.Context, criteria domain.Criteria, d
 			if p.logger != nil {
 				p.logger.Printf("jobsearch: %s search: %v", response.name, response.err)
 			}
-			continue
+			if len(response.jobs) == 0 {
+				continue
+			}
 		}
 		result.Fetched += len(response.jobs)
 		for _, raw := range response.jobs {

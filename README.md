@@ -82,8 +82,9 @@ The paycheck reminder runs at 09:00 Asia/Jakarta every 28th. `/downloadrecap` se
 ## Job Search (`/loker`)
 
 Interactive searches read Kitalulus and Dealls with deterministic filtering.
+When explicitly enabled, they also read LinkedIn's public guest-job listings.
 The scheduled curated pipeline additionally reads public server-rendered Glints
-listings.
+listings and the same optional LinkedIn source.
 
 ### Usage
 
@@ -135,6 +136,13 @@ Pipeline controls (defaults shown):
 ```dotenv
 JOB_ALERT_PIPELINE_ENABLED=true
 GLINTS_ENABLED=true
+LINKEDIN_ENABLED=false
+LINKEDIN_PAGES=2
+LINKEDIN_MAX_DETAILS=3
+LINKEDIN_POSTED_WITHIN_HOURS=168
+LINKEDIN_DISTANCE=25
+LINKEDIN_JOB_TYPES=
+LINKEDIN_COMPANY_IDS=
 JOB_ALERT_DB_PATH=/root/.picoclaw/jobs.db
 JOB_ALERT_MAX_QUERIES=5
 JOB_ALERT_AI_BATCH_SIZE=5
@@ -148,8 +156,14 @@ passes the deterministic pre-filter; increase it when a smaller, more curated
 digest is preferred. `--dry-run` intentionally bypasses job deduplication so
 testing does not consume the next real alert. Set `GLINTS_ENABLED=false` if
 Glints changes layout or returns an access-control page. Set
+`LINKEDIN_ENABLED=true` to opt into public LinkedIn guest listings for both
+interactive and scheduled searches. LinkedIn defaults to listings posted in the
+last 168 hours, two result pages, and at most three detail-page requests per
+query. `LINKEDIN_JOB_TYPES` accepts comma-separated LinkedIn codes such as
+`F,C`, while `LINKEDIN_COMPANY_IDS` accepts numeric company IDs. Disable the
+source immediately if LinkedIn returns access-control or challenge pages. Set
 `JOB_ALERT_PIPELINE_ENABLED=false` to temporarily restore the legacy scheduled
-Kitalulus/Dealls output. These flags do not alter interactive `/loker`.
+Kitalulus/Dealls output. `GLINTS_ENABLED` does not alter interactive `/loker`.
 
 ### WhatsApp Web delivery
 
@@ -205,17 +219,28 @@ sends are not retried automatically to avoid duplicate email.
 
 ### Data sources
 
-| Source    | Method                | Endpoint                                  |
-| --------- | --------------------- | ----------------------------------------- |
-| Glints    | Public SSR/JSON-LD    | `https://glints.com/id/en/lowongan-kerja` |
-| Kitalulus | SSR HTML parsing      | `https://kitalulus.com/lowongan`          |
-| Dealls    | Next.js SSR data      | `https://dealls.com/loker`                |
+| Source    | Method                   | Endpoint                                           |
+| --------- | ------------------------ | -------------------------------------------------- |
+| Glints    | Public SSR/JSON-LD       | `https://glints.com/id/en/lowongan-kerja`          |
+| Kitalulus | SSR HTML parsing         | `https://kitalulus.com/lowongan`                   |
+| Dealls    | Next.js SSR data         | `https://dealls.com/loker`                         |
+| LinkedIn  | Public guest HTML (opt-in) | `https://www.linkedin.com/jobs-guest/jobs/api/seeMoreJobPostings/search` |
 
 Glints parsing is bounded to public server-rendered content and stops on 401,
 403, 429, CAPTCHA, Cloudflare, or human-verification responses. It does not use
 browser fingerprint spoofing, CAPTCHA solving, proxies, or private APIs. Dealls
 exposes structured job data in its server-rendered Next.js pages. Kitalulus
 listings are parsed from server-rendered job cards.
+
+LinkedIn uses only unauthenticated guest-job pages: no account, private API,
+browser automation, CAPTCHA solving, proxy rotation, or fingerprint spoofing.
+Requests identify this application honestly and are spaced by at least 500 ms.
+The provider requests newest-first results and supports keyword, location,
+seven-day recency, experience, work mode, optional job type, and optional
+company filters. Fetching is bounded by configured query, page, and detail
+limits. On HTTP 401, 403, 429, 999, or a challenge page, the provider stops for
+the rest of the process lifetime; already parsed listings remain available so
+the other sources and partial LinkedIn results can still complete the digest.
 
 ### Filtering
 
@@ -226,7 +251,7 @@ listings are parsed from server-rendered job cards.
    results fall back to `Perlu Riset` rather than inventing halal evidence.
 3. **Hybrid score** — AI relevance 35%, deterministic skill 30%, role 15%,
    work mode 10%, salary 5%, and location 5%. The default digest threshold is
-   70%; scores of 85% or higher are recommendations utama.
+   1%; scores of 85% or higher are recommendations utama.
 4. **Scheduled dedupe** — SHA-256 content hashes prevent unchanged jobs from
    consuming AI tokens or appearing every day. Updated recruiter content is
    reconsidered. Interactive `/loker` deliberately bypasses this history.
@@ -238,9 +263,9 @@ Interactive `/loker` returns at most 20 results per source.
 ```
 Telegram /loker → PicoClaw job-search skill → Fiber POST :8081/loker
                   → legacy interactive service (no historical dedupe)
-                  → Kitalulus + Dealls → Telegram only
+                  → Kitalulus + Dealls + optional LinkedIn → Telegram only
 
-03:00 scheduler → search planner → Glints + Kitalulus + Dealls
+03:00 scheduler → search planner → Glints + Kitalulus + Dealls + optional LinkedIn
                 → normalize → SQLite content-hash dedupe → pre-filter
                 → batched AI assessment → weighted hybrid score
                 → one digest → Telegram + optional WhatsApp + optional email

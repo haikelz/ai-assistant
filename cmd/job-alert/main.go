@@ -61,13 +61,21 @@ func main() {
 		return
 	}
 
-	service := application.NewService([]application.Source{loggingSource{infrastructure.NewKitalulus(client, "")}, loggingSource{infrastructure.NewDealls(client, "")}}, assessor, messenger, log.Default())
+	sources := []application.Source{loggingSource{infrastructure.NewKitalulus(client, "")}, loggingSource{infrastructure.NewDealls(client, "")}}
+	if cfg.LinkedInEnabled {
+		linkedIn, err := newLinkedInProvider(client, cfg)
+		if err != nil {
+			log.Fatalf("job-alert: configure LinkedIn: %v", err)
+		}
+		sources = append(sources, loggingSource{linkedIn})
+	}
+	service := application.NewService(sources, assessor, messenger, log.Default())
 	fmt.Fprintln(os.Stderr, "job-alert: fetching")
 	result, err := service.Search(context.Background(), criteria)
 	if err != nil {
 		log.Fatal(err)
 	}
-	fmt.Fprintf(os.Stderr, "job-alert: matched kitalulus=%d dealls=%d\n", len(result.Kitalulus), len(result.Dealls))
+	fmt.Fprintf(os.Stderr, "job-alert: matched kitalulus=%d dealls=%d linkedin=%d\n", len(result.Kitalulus), len(result.Dealls), len(result.LinkedIn))
 	greeting := "Selamat pagi! ☀️ Berikut update lowongan kerja terbaru hari ini:"
 	if criteria.Interactive {
 		greeting = "Berikut hasil pencarian lowongan kerja:"
@@ -101,20 +109,39 @@ func runCurated(ctx context.Context, cfg config.Config, client *http.Client, ass
 	if cfg.GlintsEnabled {
 		jobProviders = append(jobProviders, providers.NewGlints(client, "", 2*time.Second))
 	}
+	if cfg.LinkedInEnabled {
+		linkedIn, err := newLinkedInProvider(client, cfg)
+		if err != nil {
+			return fmt.Errorf("configure LinkedIn: %w", err)
+		}
+		jobProviders = append(jobProviders, linkedIn)
+	}
 	if criteria.MinMatchScore <= 0 {
 		criteria.MinMatchScore = cfg.JobAlertMinMatchScore
 	}
-	ingestion := application.NewIngestionPipeline(application.NewSearchPlanner(cfg.JobAlertMaxQueries), jobProviders, store, 10*time.Second, 4, log.Default())
+	providerTimeout := 10 * time.Second
+	if cfg.LinkedInEnabled {
+		providerTimeout = 45 * time.Second
+	}
+	ingestion := application.NewIngestionPipeline(application.NewSearchPlanner(cfg.JobAlertMaxQueries), jobProviders, store, providerTimeout, 4, log.Default())
 	classifier := infrastructure.NewBatchClassifier(assessor, cfg.JobAlertBatchSize)
 	service := application.NewCuratedService(ingestion, classifier, application.NewMatchEngine(cfg.JobAlertMinMatchScore), store, messenger, log.Default())
 
-	fmt.Fprintf(os.Stderr, "job-alert: curated pipeline fetching providers=%d glints=%t dry_run=%t\n", len(jobProviders), cfg.GlintsEnabled, dryRun)
+	fmt.Fprintf(os.Stderr, "job-alert: curated pipeline fetching providers=%d glints=%t linkedin=%t dry_run=%t\n", len(jobProviders), cfg.GlintsEnabled, cfg.LinkedInEnabled, dryRun)
 	message, run, err := service.Run(ctx, criteria, !dryRun, !dryRun)
 	fmt.Fprintf(os.Stderr, "job-alert: run=%s status=%s fetched=%d new=%d updated=%d filtered=%d classified=%d matched=%d\n", run.ID, run.Status, run.JobsFetched, run.JobsNew, run.JobsUpdated, run.JobsFiltered, run.JobsClassified, run.JobsMatched)
 	if dryRun {
 		fmt.Println(message)
 	}
 	return err
+}
+
+func newLinkedInProvider(client *http.Client, cfg config.Config) (*providers.LinkedIn, error) {
+	return providers.NewLinkedIn(client, providers.LinkedInConfig{
+		Pages: cfg.LinkedInPages, MaxDetails: cfg.LinkedInMaxDetails, MaxQueries: cfg.JobAlertMaxQueries,
+		Distance: cfg.LinkedInDistance, PostedWithin: time.Duration(cfg.LinkedInPostedWithinHours) * time.Hour,
+		MinInterval: 500 * time.Millisecond, JobTypes: cfg.LinkedInJobTypes, CompanyIDs: cfg.LinkedInCompanyIDs,
+	})
 }
 
 func split(value string) []string {

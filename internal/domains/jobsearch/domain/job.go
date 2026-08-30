@@ -34,8 +34,10 @@ type NormalizedJob struct {
 }
 
 type SearchQuery struct {
-	Keyword  string
-	Location string
+	Keyword   string
+	Location  string
+	MaxYears  int
+	WorkModes []WorkMode
 }
 
 type UpsertOutcome string

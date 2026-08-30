@@ -53,6 +53,13 @@ set -- kubectl create secret generic ai-assistant-env \
   --from-literal=WHATSAPP_RECIPIENT="${WHATSAPP_RECIPIENT:-}" \
   --from-literal=JOB_ALERT_PIPELINE_ENABLED="${JOB_ALERT_PIPELINE_ENABLED:-true}" \
   --from-literal=GLINTS_ENABLED="${GLINTS_ENABLED:-true}" \
+  --from-literal=LINKEDIN_ENABLED="${LINKEDIN_ENABLED:-false}" \
+  --from-literal=LINKEDIN_PAGES="${LINKEDIN_PAGES:-2}" \
+  --from-literal=LINKEDIN_MAX_DETAILS="${LINKEDIN_MAX_DETAILS:-3}" \
+  --from-literal=LINKEDIN_POSTED_WITHIN_HOURS="${LINKEDIN_POSTED_WITHIN_HOURS:-168}" \
+  --from-literal=LINKEDIN_DISTANCE="${LINKEDIN_DISTANCE:-25}" \
+  --from-literal=LINKEDIN_JOB_TYPES="${LINKEDIN_JOB_TYPES:-}" \
+  --from-literal=LINKEDIN_COMPANY_IDS="${LINKEDIN_COMPANY_IDS:-}" \
   --from-literal=JOB_ALERT_DB_PATH="${JOB_ALERT_DB_PATH:-/root/.picoclaw/jobs.db}" \
   --from-literal=JOB_ALERT_MAX_QUERIES="${JOB_ALERT_MAX_QUERIES:-5}" \
   --from-literal=JOB_ALERT_AI_BATCH_SIZE="${JOB_ALERT_AI_BATCH_SIZE:-5}" \
