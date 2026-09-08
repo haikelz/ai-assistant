@@ -28,7 +28,11 @@
       "enabled": true,
       "enable_deny_patterns": true,
       "allow_remote": true,
-      "timeout_seconds": 20
+      "timeout_seconds": 20,
+      "custom_deny_patterns": [
+        "(^|[;&|]\\s*)(ssh|scp|sftp)\\b",
+        "(^|[;&|]\\s*)(docker|kubectl)\\b"
+      ]
     },
     "cron": {
       "enabled": true,

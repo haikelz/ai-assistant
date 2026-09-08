@@ -1,0 +1,17 @@
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: ai-assistant-allow-vps-ssh
+spec:
+  podSelector:
+    matchLabels:
+      app: ai-assistant
+  policyTypes:
+    - Egress
+  egress:
+    - to:
+        - ipBlock:
+            cidr: __VPS_SSH_CIDR__
+      ports:
+        - protocol: TCP
+          port: __VPS_SSH_PORT__

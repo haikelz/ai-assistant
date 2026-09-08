@@ -1,0 +1,46 @@
+#!/bin/sh
+set -eu
+
+STATE_FILE="${ABSENCE_STATE_FILE:-/tmp/absence-scheduler.state}"
+if [ -z "${STARCO_USERNAME:-}" ] || [ -z "${STARCO_PASSWORD:-}" ]; then
+	echo "attendance: STARCO_USERNAME/STARCO_PASSWORD not set; scheduler disabled" >&2
+	exit 0
+fi
+
+is_done() {
+	action=$1
+	today=$2
+	grep -q "^$action=$today$" "$STATE_FILE" 2>/dev/null
+}
+
+mark_done() {
+	action=$1
+	today=$2
+	touch "$STATE_FILE"
+	grep -v "^$action=" "$STATE_FILE" > "$STATE_FILE.tmp" 2>/dev/null || true
+	echo "$action=$today" >> "$STATE_FILE.tmp"
+	mv "$STATE_FILE.tmp" "$STATE_FILE"
+}
+
+echo "attendance: scheduler started (clock-in 08:00, clock-out 17:00, Mon-Fri Asia/Jakarta)" >&2
+while true; do
+	WEEKDAY=$(TZ=Asia/Jakarta date +%u)
+	HOUR=$(TZ=Asia/Jakarta date +%H)
+	TODAY=$(TZ=Asia/Jakarta date +%Y-%m-%d)
+	if [ "$WEEKDAY" -ge 1 ] && [ "$WEEKDAY" -le 5 ]; then
+		for window in "clock-in:08" "clock-out:17"; do
+			action=${window%%:*}
+			target_hour=${window##*:}
+			if [ "$HOUR" = "$target_hour" ] && ! is_done "$action" "$TODAY"; then
+				echo "attendance: running scheduled $action" >&2
+				if /usr/local/bin/attendance "$action"; then
+					mark_done "$action" "$TODAY"
+					echo "attendance: $action recorded for $TODAY" >&2
+				else
+					echo "attendance: $action failed; retrying while hour is $target_hour" >&2
+				fi
+			fi
+		done
+	fi
+	sleep 300
+done

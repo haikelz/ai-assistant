@@ -71,7 +71,13 @@ set -- kubectl create secret generic ai-assistant-env \
   --from-literal=MAIL_PORT="${MAIL_PORT:-}" \
   --from-literal=MAIL_ENCRYPTION="${MAIL_ENCRYPTION:-}" \
   --from-literal=MAIL_FROM="${MAIL_FROM:-}" \
-  --from-literal=MAIL_TO="${MAIL_TO:-}"
+  --from-literal=MAIL_TO="${MAIL_TO:-}" \
+  --from-literal=STARCO_USERNAME="${STARCO_USERNAME:-}" \
+  --from-literal=STARCO_PASSWORD="${STARCO_PASSWORD:-}"
+
+if [ -n "${STARCO_USERNAME:-}" ]; then
+  : "${STARCO_PASSWORD:?STARCO_PASSWORD must be set when STARCO_USERNAME is set}"
+fi
 
 if [ -n "${GOOGLE_SHEETS_SPREADSHEET_ID:-}" ] || [ -n "${GOOGLE_SERVICE_ACCOUNT_JSON_BASE64:-}" ]; then
   : "${GOOGLE_SHEETS_SPREADSHEET_ID:?GOOGLE_SHEETS_SPREADSHEET_ID must be set when Google Sheets is enabled}"

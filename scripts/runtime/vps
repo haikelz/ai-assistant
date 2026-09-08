@@ -1,0 +1,84 @@
+#!/bin/sh
+set -eu
+
+ssh_dir=/run/secrets/vps-ssh
+key_file=$ssh_dir/id_ed25519
+known_hosts=$ssh_dir/known_hosts
+
+usage() {
+	cat <<'EOF'
+Usage:
+  vps linux status|processes|journal <unit> [lines]
+  vps docker <docker arguments...>
+  vps kubectl <kubectl arguments...>
+
+Docker and kubectl commands are forwarded to the VPS through the restricted
+picoclaw-ops SSH account. Direct ssh, docker, and kubectl execution is blocked.
+EOF
+}
+
+read_setting() {
+	tr -d '\r\n' < "$ssh_dir/$1"
+}
+
+require_connection() {
+	if [ ! -r "$key_file" ] || [ ! -r "$known_hosts" ] || [ ! -r "$ssh_dir/host" ] || [ ! -r "$ssh_dir/user" ] || [ ! -r "$ssh_dir/port" ]; then
+		echo "VPS SSH access is not configured. Apply Secret/ai-assistant-vps-ssh first." >&2
+		exit 1
+	fi
+
+	host=$(read_setting host)
+	user=$(read_setting user)
+	port=$(read_setting port)
+	case "$host" in ''|*[!A-Za-z0-9.-]*) echo "invalid VPS SSH host" >&2; exit 1 ;; esac
+	case "$user" in ''|*[!A-Za-z0-9_-]*) echo "invalid VPS SSH user" >&2; exit 1 ;; esac
+	case "$port" in ''|*[!0-9]*) echo "invalid VPS SSH port" >&2; exit 1 ;; esac
+	[ "$port" -ge 1 ] 2>/dev/null && [ "$port" -le 65535 ] 2>/dev/null || { echo "invalid VPS SSH port" >&2; exit 1; }
+}
+
+run_remote() {
+	require_connection
+	printf '%s\0' "$@" | /usr/bin/ssh -F /dev/null \
+		-o BatchMode=yes \
+		-o ClearAllForwardings=yes \
+		-o IdentitiesOnly=yes \
+		-o KbdInteractiveAuthentication=no \
+		-o PasswordAuthentication=no \
+		-o RequestTTY=no \
+		-o StrictHostKeyChecking=yes \
+		-o UserKnownHostsFile="$known_hosts" \
+		-o ConnectTimeout=10 \
+		-i "$key_file" \
+		-p "$port" \
+		"$user@$host" /usr/local/libexec/picoclaw-vps-exec
+}
+
+operation=${1:-help}
+case "$operation" in
+	help|-h|--help)
+		usage
+		;;
+	linux)
+		subcommand=${2:-}
+		case "$subcommand" in
+			status) [ "$#" -eq 2 ] || { usage >&2; exit 2; }; run_remote linux-status ;;
+			processes) [ "$#" -eq 2 ] || { usage >&2; exit 2; }; run_remote linux-processes ;;
+			journal) [ "$#" -ge 3 ] && [ "$#" -le 4 ] || { usage >&2; exit 2; }; run_remote linux-journal "${3:-}" "${4:-100}" ;;
+			*) usage >&2; exit 2 ;;
+		esac
+		;;
+	docker)
+		shift
+		[ "$#" -gt 0 ] || { usage >&2; exit 2; }
+		run_remote docker "$@"
+		;;
+	kubectl)
+		shift
+		[ "$#" -gt 0 ] || { usage >&2; exit 2; }
+		run_remote kubernetes "$@"
+		;;
+	*)
+		usage >&2
+		exit 2
+		;;
+esac

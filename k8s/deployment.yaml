@@ -21,6 +21,11 @@ spec:
         - name: picoclaw-data
           persistentVolumeClaim:
             claimName: ai-assistant-data
+        - name: vps-ssh
+          secret:
+            secretName: ai-assistant-vps-ssh
+            optional: true
+            defaultMode: 0400
       initContainers:
         - name: initialize-workspace
           image: haikelilham/ai-assistant
@@ -32,6 +37,8 @@ spec:
               if [ ! -f /root/.picoclaw/workspace/SOUL.md ]; then cp -R /seed/workspace /root/.picoclaw/workspace; fi
               mkdir -p /root/.picoclaw/workspace/skills/job-search
               cp /seed/workspace/skills/job-search/SKILL.md /root/.picoclaw/workspace/skills/job-search/SKILL.md
+              mkdir -p /root/.picoclaw/workspace/skills/vps-ops
+              cp /seed/workspace/skills/vps-ops/SKILL.md /root/.picoclaw/workspace/skills/vps-ops/SKILL.md
               CLEAN_BOT_TOKEN=$(printenv TELEGRAM_BOT_TOKEN | tr -d '\r\n')
               printf 'channels:\n  telegram:\n    settings:\n      token: "%s"\n' "$CLEAN_BOT_TOKEN" > /root/.picoclaw/.security.yml
           env:
@@ -245,6 +252,16 @@ spec:
                 secretKeyRef:
                   name: ai-assistant-env
                   key: MAIL_TO
+            - name: STARCO_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: ai-assistant-env
+                  key: STARCO_USERNAME
+            - name: STARCO_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: ai-assistant-env
+                  key: STARCO_PASSWORD
           ports:
             - name: http
               containerPort: 18790
@@ -270,3 +287,6 @@ spec:
           volumeMounts:
             - name: picoclaw-data
               mountPath: /root/.picoclaw
+            - name: vps-ssh
+              mountPath: /run/secrets/vps-ssh
+              readOnly: true

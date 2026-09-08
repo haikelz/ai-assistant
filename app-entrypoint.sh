@@ -36,8 +36,13 @@ fi
 # restored from an older persistent volume.
 mkdir -p /root/.picoclaw/workspace/skills/job-search
 cp /seed/workspace/skills/job-search/SKILL.md /root/.picoclaw/workspace/skills/job-search/SKILL.md
+mkdir -p /root/.picoclaw/workspace/skills/vps-ops
+cp /seed/workspace/skills/vps-ops/SKILL.md /root/.picoclaw/workspace/skills/vps-ops/SKILL.md
 
 # Start the daily halal-labelled job alert at 3 AM.
 job-alert-scheduler &
+
+# Start weekday Starco attendance automation (08:00 clock-in, 17:00 clock-out).
+absence-scheduler &
 
 exec /entrypoint.sh

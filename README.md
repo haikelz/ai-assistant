@@ -271,6 +271,81 @@ Telegram /loker → PicoClaw job-search skill → Fiber POST :8081/loker
                 → one digest → Telegram + optional WhatsApp + optional email
 ```
 
+### Attendance automation
+
+On Monday to Friday, the in-pod `absence-scheduler` signs in to Starco and
+records attendance twice per Asia/Jakarta workday: clock-in at 08:00 and
+clock-out at 17:00. Each action runs at most once per day: a failed run is
+retried every five minutes within its hour, and a recorded action is never
+repeated. The scheduler disables itself when `STARCO_USERNAME` or
+`STARCO_PASSWORD` is unset.
+
+The one-shot `cmd/absence-automation` binary (installed as `attendance`) drives
+headless Chromium over the DevTools protocol, so the container image includes
+the `chromium` package. Starco selectors verified against the live site are the
+defaults (`#clock-in`, `#clock-out` on the dashboard) and fall back to visible
+button text when the ids are absent.
+
+Optional configuration in `.env` / `.env.example`: `STARCO_URL`,
+`STARCO_ATTENDANCE_URL`, selector overrides, `STARCO_TIMEOUT_SECONDS`, and
+`STARCO_GEO_LATITUDE` plus `STARCO_GEO_LONGITUDE` to supply a browser position,
+because headless Chromium denies geolocation prompts.
+
+Manual run outside the container:
+
+```sh
+set -a; . ./.env; set +a
+go run ./cmd/absence-automation clock-in   # or: clock-out
+```
+
+### VPS operations from Telegram
+
+The Telegram allowlist is necessary but not sufficient for VPS administration.
+This repository provides a forced-command SSH path: PicoClaw can use `vps` for
+read-only Linux status and, by owner authorization, arbitrary Docker and
+Kubernetes arguments. Docker access is effectively host-root access and an
+admin kubeconfig can read or mutate the cluster. The bot must never be given a
+root login, an unrestricted shell, or a key shared with a person.
+
+On an administrative machine, create a dedicated deployment key outside this
+repository:
+
+```sh
+ssh-keygen -t ed25519 -f ~/.ssh/picoclaw_vps_ops -C picoclaw-vps-ops
+```
+
+Copy only the `.pub` file to the VPS and run the provisioning script from this
+checkout as root. Optionally provide the kubeconfig that should govern the
+bot's Kubernetes permissions.
+
+```sh
+sudo PICOCLAW_OPS_PUBLIC_KEY_FILE=/secure/path/picoclaw_vps_ops.pub \
+  PICOCLAW_KUBECONFIG_FILE=/secure/path/kubeconfig \
+  bash k8s/provision-vps-ops.sh
+```
+
+Verify the VPS SSH host-key fingerprint through the VPS console before making
+the `known_hosts` file. Then create the Kubernetes Secret and a single-host SSH
+egress policy. `VPS_SSH_CIDR` must be the VPS public address with a `/32`
+suffix; do not use `0.0.0.0/0`.
+
+```sh
+VPS_SSH_HOST=<vps-hostname> \
+VPS_SSH_CIDR=<vps-public-ip>/32 \
+VPS_SSH_KEY_FILE=~/.ssh/picoclaw_vps_ops \
+VPS_SSH_KNOWN_HOSTS_FILE=/secure/path/known_hosts \
+  sh k8s/apply-vps-ssh-access.sh
+```
+
+Build and publish the updated image, then restart the Deployment. The Secret is
+mounted read-only at `/run/secrets/vps-ssh`; it is optional so the existing bot
+continues to start until access is configured.
+
+Use Telegram requests such as `cek status VPS`, `lihat Docker container`, or
+`restart deployment ai-assistant`. The `vps-ops` skill requires confirmation
+before state-changing Docker or Kubernetes actions and never allows direct SSH
+or unbounded Linux shell commands.
+
 ### Architecture
 
 | Runtime | Port | Role |
@@ -279,6 +354,7 @@ Telegram /loker → PicoClaw job-search skill → Fiber POST :8081/loker
 | `cmd/app` | 8080 | Finance ledger, Google Sheets sync, and Sumopod Responses proxy |
 | `cmd/app` | 8081 | Compatible asynchronous `POST /loker` endpoint |
 | `job-alert-scheduler` | — | Background scheduler for the 03:00 daily alert |
+| `absence-scheduler` | — | Background weekday Starco clock-in (08:00) and clock-out (17:00) |
 | `cmd/job-alert` | — | One-shot fetch, filter, halal assessment, and scheduled multi-channel delivery |
 
 ### Binaries and scripts
@@ -287,6 +363,7 @@ Telegram /loker → PicoClaw job-search skill → Fiber POST :8081/loker
 | --- | --- |
 | `cmd/app` | Fiber composition root and process lifecycle |
 | `cmd/job-alert` | One-shot job-alert CLI |
+| `cmd/absence-automation` | One-shot Starco attendance CLI (clock-in / clock-out) |
 | `internal/domains/finance` | Finance domain, use cases, SQLite/Sheets adapters, HTTP delivery |
 | `internal/domains/jobsearch` | Job-search domain, orchestration, provider adapters, HTTP delivery |
 | `internal/domains/ai` | Sumopod Responses compatibility adapter and HTTP delivery |
