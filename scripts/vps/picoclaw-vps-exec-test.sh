@@ -18,6 +18,12 @@ linux_output=$(printf '%s\0%s\0%s\0%s\0%s\0' linux /usr/bin/printf '%s:%s' first
 	exit 1
 }
 
+kubernetes_trace=$(printf '%s\0%s\0%s\0' kubernetes version --client | SSH_ORIGINAL_COMMAND=/usr/local/libexec/picoclaw-vps-exec bash -x "$executor" 2>&1 || true)
+printf '%s\n' "$kubernetes_trace" | grep -Fq 'KUBECONFIG=/var/lib/picoclaw-ops/.kube/config' || {
+	echo 'expected Kubernetes to use the picoclaw-ops kubeconfig' >&2
+	exit 1
+}
+
 if printf 'unsupported\0' | SSH_ORIGINAL_COMMAND=/usr/local/libexec/picoclaw-vps-exec "$executor" >/dev/null 2>&1; then
 	echo 'expected unsupported operation to fail' >&2
 	exit 1

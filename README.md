@@ -321,9 +321,13 @@ bot's Kubernetes permissions.
 
 ```sh
 sudo PICOCLAW_OPS_PUBLIC_KEY_FILE=/secure/path/picoclaw_vps_ops.pub \
-  PICOCLAW_KUBECONFIG_FILE=/secure/path/kubeconfig \
+  PICOCLAW_KUBECONFIG_FILE=/etc/rancher/k3s/k3s.yaml \
   bash k8s/provision-vps-ops.sh
 ```
+
+The provisioning script copies that root-only K3s admin kubeconfig to
+`/var/lib/picoclaw-ops/.kube/config` with mode `0600`; PicoClaw uses the copy,
+not `/etc/rancher/k3s/k3s.yaml` directly.
 
 Verify the VPS SSH host-key fingerprint through the VPS console before making
 the `known_hosts` file. Then create the Kubernetes Secret and a single-host SSH

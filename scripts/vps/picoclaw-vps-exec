@@ -40,7 +40,7 @@ EOF
 		if [ "$operation" = docker ]; then
 			exec docker "${args[@]}"
 		fi
-		exec kubectl "${args[@]}"
+		exec env KUBECONFIG=/var/lib/picoclaw-ops/.kube/config kubectl "${args[@]}"
 		;;
 	*)
 		fail "unsupported VPS operation"
