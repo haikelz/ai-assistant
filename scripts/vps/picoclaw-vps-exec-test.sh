@@ -19,7 +19,7 @@ linux_output=$(printf '%s\0%s\0%s\0%s\0%s\0' linux /usr/bin/printf '%s:%s' first
 }
 
 kubernetes_trace=$(printf '%s\0%s\0%s\0' kubernetes version --client | SSH_ORIGINAL_COMMAND=/usr/local/libexec/picoclaw-vps-exec bash -x "$executor" 2>&1 || true)
-printf '%s\n' "$kubernetes_trace" | grep -Fq 'KUBECONFIG=/var/lib/picoclaw-ops/.kube/config' || {
+printf '%s\n' "$kubernetes_trace" | grep -Fq -- '--kubeconfig=/var/lib/picoclaw-ops/.kube/config' || {
 	echo 'expected Kubernetes to use the picoclaw-ops kubeconfig' >&2
 	exit 1
 }
