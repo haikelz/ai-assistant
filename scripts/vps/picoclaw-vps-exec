@@ -13,6 +13,14 @@ read_nul() {
 	IFS= read -r -d '' "$1"
 }
 
+read_arguments() {
+	args=()
+	while IFS= read -r -d '' argument; do
+		args+=("$argument")
+	done
+	[ "${#args[@]}" -gt 0 ] || fail "missing ${operation} arguments"
+}
+
 read_nul operation || fail "missing VPS operation"
 
 [ "${SSH_ORIGINAL_COMMAND:-}" = "/usr/local/libexec/picoclaw-vps-exec" ] || fail "unexpected SSH command"
@@ -20,32 +28,15 @@ read_nul operation || fail "missing VPS operation"
 case "$operation" in
 	help)
 		cat <<'EOF'
-Allowed operations: linux-status, linux-processes, linux-journal, docker, kubernetes.
+Allowed operations: linux, docker, kubernetes.
 EOF
 		;;
-	linux-status)
-		hostname -f 2>/dev/null || hostname
-		uptime
-		df -h /
-		free -h
-		;;
-	linux-processes)
-		ps -eo pid,user,comm,%cpu,%mem --sort=-%cpu | sed -n '1,31p'
-		;;
-	linux-journal)
-		read_nul unit || fail "missing systemd unit"
-		read_nul lines || fail "missing journal line limit"
-		case "$unit" in ''|*[!A-Za-z0-9@_.-]*) fail "invalid systemd unit" ;; esac
-		case "$lines" in ''|*[!0-9]*) fail "invalid journal line limit" ;; esac
-		[ "$lines" -le 500 ] 2>/dev/null || fail "journal line limit must be at most 500"
-		exec journalctl --no-pager -u "$unit" -n "$lines"
+	linux)
+		read_arguments
+		exec "${args[@]}"
 		;;
 	docker|kubernetes)
-		args=()
-		while IFS= read -r -d '' argument; do
-			args+=("$argument")
-		done
-		[ "${#args[@]}" -gt 0 ] || fail "missing ${operation} arguments"
+		read_arguments
 		if [ "$operation" = docker ]; then
 			exec docker "${args[@]}"
 		fi

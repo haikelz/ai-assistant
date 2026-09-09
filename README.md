@@ -302,10 +302,11 @@ go run ./cmd/absence-automation clock-in   # or: clock-out
 
 The Telegram allowlist is necessary but not sufficient for VPS administration.
 This repository provides a forced-command SSH path: PicoClaw can use `vps` for
-read-only Linux status and, by owner authorization, arbitrary Docker and
-Kubernetes arguments. Docker access is effectively host-root access and an
-admin kubeconfig can read or mutate the cluster. The bot must never be given a
-root login, an unrestricted shell, or a key shared with a person.
+owner-authorized arbitrary Linux, Docker, and Kubernetes arguments on a
+playground VPS. Docker access is effectively host-root access and an admin
+kubeconfig can read or mutate the cluster. The bot must never be given a root
+login or a key shared with a person; commands still pass through the dedicated
+forced-command SSH account.
 
 On an administrative machine, create a dedicated deployment key outside this
 repository:
@@ -343,8 +344,8 @@ continues to start until access is configured.
 
 Use Telegram requests such as `cek status VPS`, `lihat Docker container`, or
 `restart deployment ai-assistant`. The `vps-ops` skill requires confirmation
-before state-changing Docker or Kubernetes actions and never allows direct SSH
-or unbounded Linux shell commands.
+before destructive or ambiguous Linux, Docker, or Kubernetes actions and never
+allows direct SSH.
 
 ### Architecture
 

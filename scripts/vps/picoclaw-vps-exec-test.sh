@@ -12,12 +12,18 @@ if printf 'docker\0' | SSH_ORIGINAL_COMMAND=/usr/local/libexec/picoclaw-vps-exec
 	exit 1
 fi
 
+linux_output=$(printf '%s\0%s\0%s\0%s\0%s\0' linux /usr/bin/printf '%s:%s' first second | SSH_ORIGINAL_COMMAND=/usr/local/libexec/picoclaw-vps-exec "$executor")
+[ "$linux_output" = 'first:second' ] || {
+	echo 'expected Linux argv to be forwarded unchanged' >&2
+	exit 1
+}
+
 if printf 'unsupported\0' | SSH_ORIGINAL_COMMAND=/usr/local/libexec/picoclaw-vps-exec "$executor" >/dev/null 2>&1; then
 	echo 'expected unsupported operation to fail' >&2
 	exit 1
 fi
 
-if printf '%s\0%s\0%s\0' linux-journal ../../etc/passwd 100 | SSH_ORIGINAL_COMMAND=/usr/local/libexec/picoclaw-vps-exec "$executor" >/dev/null 2>&1; then
-	echo 'expected unsafe systemd unit to fail' >&2
+if printf '%s\0%s\0' linux /bin/true | SSH_ORIGINAL_COMMAND=malicious "$executor" >/dev/null 2>&1; then
+	echo 'expected unexpected SSH command to fail' >&2
 	exit 1
 fi

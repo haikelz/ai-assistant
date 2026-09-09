@@ -8,12 +8,13 @@ known_hosts=$ssh_dir/known_hosts
 usage() {
 	cat <<'EOF'
 Usage:
-  vps linux status|processes|journal <unit> [lines]
+  vps linux <command> [arguments...]
   vps docker <docker arguments...>
   vps kubectl <kubectl arguments...>
 
-Docker and kubectl commands are forwarded to the VPS through the restricted
-picoclaw-ops SSH account. Direct ssh, docker, and kubectl execution is blocked.
+Linux, Docker, and kubectl arguments are forwarded to the VPS through the
+restricted picoclaw-ops SSH account. Direct ssh, docker, and kubectl execution
+is blocked.
 EOF
 }
 
@@ -59,13 +60,9 @@ case "$operation" in
 		usage
 		;;
 	linux)
-		subcommand=${2:-}
-		case "$subcommand" in
-			status) [ "$#" -eq 2 ] || { usage >&2; exit 2; }; run_remote linux-status ;;
-			processes) [ "$#" -eq 2 ] || { usage >&2; exit 2; }; run_remote linux-processes ;;
-			journal) [ "$#" -ge 3 ] && [ "$#" -le 4 ] || { usage >&2; exit 2; }; run_remote linux-journal "${3:-}" "${4:-100}" ;;
-			*) usage >&2; exit 2 ;;
-		esac
+		shift
+		[ "$#" -gt 0 ] || { usage >&2; exit 2; }
+		run_remote linux "$@"
 		;;
 	docker)
 		shift
