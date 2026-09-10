@@ -286,8 +286,8 @@ the `chromium` package. Starco selectors verified against the live site are the
 defaults (`#clock-in`, `#clock-out` on the dashboard) and fall back to visible
 button text when the ids are absent.
 
-Optional configuration in `.env` / `.env.example`: `STARCO_URL`,
-`STARCO_ATTENDANCE_URL`, selector overrides, `STARCO_TIMEOUT_SECONDS`, and
+Set `STARCO_URL` when enabling the scheduler. Optional configuration in `.env` /
+`.env.example`: `STARCO_ATTENDANCE_URL`, clock selector overrides, `STARCO_TIMEOUT_SECONDS`, and
 `STARCO_GEO_LATITUDE` plus `STARCO_GEO_LONGITUDE` to supply a browser position,
 because headless Chromium denies geolocation prompts.
 

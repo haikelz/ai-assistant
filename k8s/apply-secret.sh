@@ -72,11 +72,19 @@ set -- kubectl create secret generic ai-assistant-env \
   --from-literal=MAIL_ENCRYPTION="${MAIL_ENCRYPTION:-}" \
   --from-literal=MAIL_FROM="${MAIL_FROM:-}" \
   --from-literal=MAIL_TO="${MAIL_TO:-}" \
+  --from-literal=STARCO_URL="${STARCO_URL:-}" \
   --from-literal=STARCO_USERNAME="${STARCO_USERNAME:-}" \
-  --from-literal=STARCO_PASSWORD="${STARCO_PASSWORD:-}"
+  --from-literal=STARCO_PASSWORD="${STARCO_PASSWORD:-}" \
+  --from-literal=STARCO_ATTENDANCE_URL="${STARCO_ATTENDANCE_URL:-}" \
+  --from-literal=STARCO_CLOCK_IN_SELECTOR="${STARCO_CLOCK_IN_SELECTOR:-}" \
+  --from-literal=STARCO_CLOCK_OUT_SELECTOR="${STARCO_CLOCK_OUT_SELECTOR:-}" \
+  --from-literal=STARCO_GEO_LATITUDE="${STARCO_GEO_LATITUDE:-}" \
+  --from-literal=STARCO_GEO_LONGITUDE="${STARCO_GEO_LONGITUDE:-}" \
+  --from-literal=STARCO_TIMEOUT_SECONDS="${STARCO_TIMEOUT_SECONDS:-90}"
 
 if [ -n "${STARCO_USERNAME:-}" ]; then
   : "${STARCO_PASSWORD:?STARCO_PASSWORD must be set when STARCO_USERNAME is set}"
+  : "${STARCO_URL:?STARCO_URL must be set when STARCO_USERNAME is set}"
 fi
 
 if [ -n "${GOOGLE_SHEETS_SPREADSHEET_ID:-}" ] || [ -n "${GOOGLE_SERVICE_ACCOUNT_JSON_BASE64:-}" ]; then

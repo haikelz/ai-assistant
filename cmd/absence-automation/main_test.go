@@ -22,6 +22,7 @@ func TestLoadConfig(t *testing.T) {
 	}{
 		"defaults": {
 			env: map[string]string{
+				"STARCO_URL":           "https://starco.example.test",
 				"STARCO_USERNAME":      "user@example.com",
 				"STARCO_PASSWORD":      "secret",
 				"STARCO_CHROMIUM_PATH": chromium,
@@ -43,6 +44,7 @@ func TestLoadConfig(t *testing.T) {
 		},
 		"overrides": {
 			env: map[string]string{
+				"STARCO_URL":             "https://starco.example.test",
 				"STARCO_USERNAME":        "user@example.com",
 				"STARCO_PASSWORD":        "secret",
 				"STARCO_CHROMIUM_PATH":   chromium,
@@ -64,6 +66,7 @@ func TestLoadConfig(t *testing.T) {
 		},
 		"missing username": {
 			env: map[string]string{
+				"STARCO_URL":           "https://starco.example.test",
 				"STARCO_PASSWORD":      "secret",
 				"STARCO_CHROMIUM_PATH": chromium,
 			},
@@ -71,6 +74,7 @@ func TestLoadConfig(t *testing.T) {
 		},
 		"missing password": {
 			env: map[string]string{
+				"STARCO_URL":           "https://starco.example.test",
 				"STARCO_USERNAME":      "user@example.com",
 				"STARCO_CHROMIUM_PATH": chromium,
 			},
@@ -78,6 +82,7 @@ func TestLoadConfig(t *testing.T) {
 		},
 		"timeout below range": {
 			env: map[string]string{
+				"STARCO_URL":             "https://starco.example.test",
 				"STARCO_USERNAME":        "user@example.com",
 				"STARCO_PASSWORD":        "secret",
 				"STARCO_CHROMIUM_PATH":   chromium,
@@ -87,6 +92,7 @@ func TestLoadConfig(t *testing.T) {
 		},
 		"chromium missing": {
 			env: map[string]string{
+				"STARCO_URL":           "https://starco.example.test",
 				"STARCO_USERNAME":      "user@example.com",
 				"STARCO_PASSWORD":      "secret",
 				"STARCO_CHROMIUM_PATH": "/nonexistent/chromium",
@@ -96,6 +102,7 @@ func TestLoadConfig(t *testing.T) {
 		},
 		"geolocation without longitude": {
 			env: map[string]string{
+				"STARCO_URL":           "https://starco.example.test",
 				"STARCO_USERNAME":      "user@example.com",
 				"STARCO_PASSWORD":      "secret",
 				"STARCO_CHROMIUM_PATH": chromium,
@@ -105,6 +112,7 @@ func TestLoadConfig(t *testing.T) {
 		},
 		"geolocation not numeric": {
 			env: map[string]string{
+				"STARCO_URL":           "https://starco.example.test",
 				"STARCO_USERNAME":      "user@example.com",
 				"STARCO_PASSWORD":      "secret",
 				"STARCO_CHROMIUM_PATH": chromium,
@@ -112,6 +120,14 @@ func TestLoadConfig(t *testing.T) {
 				"STARCO_GEO_LONGITUDE": "106.8",
 			},
 			wantErr: "STARCO_GEO_LATITUDE must be a number",
+		},
+		"missing Starco URL": {
+			env: map[string]string{
+				"STARCO_USERNAME":      "user@example.com",
+				"STARCO_PASSWORD":      "secret",
+				"STARCO_CHROMIUM_PATH": chromium,
+			},
+			wantErr: "STARCO_URL is required",
 		},
 	}
 

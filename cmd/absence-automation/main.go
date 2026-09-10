@@ -112,6 +112,9 @@ func loadConfig() (config, error) {
 	if cfg.Password == "" {
 		return config{}, errors.New("STARCO_PASSWORD is required")
 	}
+	if cfg.URL == "" {
+		return config{}, errors.New("STARCO_URL is required")
+	}
 	if _, err := os.Stat(cfg.ChromiumPath); err != nil {
 		fallback, lookupErr := chromiumFallback(cfg.ChromiumPath)
 		if lookupErr != nil {

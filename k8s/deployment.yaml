@@ -257,11 +257,46 @@ spec:
                 secretKeyRef:
                   name: ai-assistant-env
                   key: STARCO_USERNAME
+            - name: STARCO_URL
+              valueFrom:
+                secretKeyRef:
+                  name: ai-assistant-env
+                  key: STARCO_URL
             - name: STARCO_PASSWORD
               valueFrom:
                 secretKeyRef:
                   name: ai-assistant-env
                   key: STARCO_PASSWORD
+            - name: STARCO_ATTENDANCE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: ai-assistant-env
+                  key: STARCO_ATTENDANCE_URL
+            - name: STARCO_CLOCK_IN_SELECTOR
+              valueFrom:
+                secretKeyRef:
+                  name: ai-assistant-env
+                  key: STARCO_CLOCK_IN_SELECTOR
+            - name: STARCO_CLOCK_OUT_SELECTOR
+              valueFrom:
+                secretKeyRef:
+                  name: ai-assistant-env
+                  key: STARCO_CLOCK_OUT_SELECTOR
+            - name: STARCO_GEO_LATITUDE
+              valueFrom:
+                secretKeyRef:
+                  name: ai-assistant-env
+                  key: STARCO_GEO_LATITUDE
+            - name: STARCO_GEO_LONGITUDE
+              valueFrom:
+                secretKeyRef:
+                  name: ai-assistant-env
+                  key: STARCO_GEO_LONGITUDE
+            - name: STARCO_TIMEOUT_SECONDS
+              valueFrom:
+                secretKeyRef:
+                  name: ai-assistant-env
+                  key: STARCO_TIMEOUT_SECONDS
           ports:
             - name: http
               containerPort: 18790
