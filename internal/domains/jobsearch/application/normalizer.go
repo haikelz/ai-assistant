@@ -26,24 +26,44 @@ func NormalizeJob(raw domain.RawJob, now time.Time) domain.NormalizedJob {
 	}
 	minimumSalary, maximumSalary, currency := parseSalary(raw.SalaryText)
 	minimumYears, maximumYears := parseExperience(raw.ExperienceText)
+
 	job := domain.NormalizedJob{
-		ID: source + ":" + externalID, Source: source, ExternalID: externalID,
-		CanonicalURL: canonicalURL, Title: cleanText(raw.Title), NormalizedTitle: strings.ToLower(cleanText(raw.Title)),
-		Company: cleanText(raw.Company), Description: cleanText(raw.Description), City: cleanText(raw.Location),
-		WorkMode: normalizeWorkMode(raw.WorkMode + " " + raw.Location), SalaryMin: minimumSalary, SalaryMax: maximumSalary,
-		SalaryCurrency: currency, MinYearsExp: minimumYears, MaxYearsExp: maximumYears,
-		Skills: normalizeSkills(raw.Skills), SourcePublishedAt: raw.PublishedAt, FirstSeenAt: now.UTC(), LastSeenAt: now.UTC(),
-		EmploymentType: cleanText(raw.EmploymentType),
+		ID:                source + ":" + externalID,
+		Source:            source,
+		ExternalID:        externalID,
+		CanonicalURL:      canonicalURL,
+		Title:             cleanText(raw.Title),
+		NormalizedTitle:   strings.ToLower(cleanText(raw.Title)),
+		Company:           cleanText(raw.Company),
+		Description:       cleanText(raw.Description),
+		City:              cleanText(raw.Location),
+		WorkMode:          normalizeWorkMode(raw.WorkMode + " " + raw.Location),
+		SalaryMin:         minimumSalary,
+		SalaryMax:         maximumSalary,
+		SalaryCurrency:    currency,
+		MinYearsExp:       minimumYears,
+		MaxYearsExp:       maximumYears,
+		Skills:            normalizeSkills(raw.Skills),
+		SourcePublishedAt: raw.PublishedAt,
+		FirstSeenAt:       now.UTC(),
+		LastSeenAt:        now.UTC(),
+		EmploymentType:    cleanText(raw.EmploymentType),
 	}
+
 	job.ContentHash = GenerateContentHash(job)
 	return job
 }
 
 func GenerateContentHash(job domain.NormalizedJob) string {
 	data := strings.Join([]string{
-		strings.ToLower(strings.TrimSpace(job.Title)), strings.ToLower(strings.TrimSpace(job.Company)),
-		strings.ToLower(strings.TrimSpace(job.City)), strconv.FormatInt(job.SalaryMin, 10), strconv.FormatInt(job.SalaryMax, 10),
-		string(job.WorkMode), strings.Join(normalizeSkills(job.Skills), ","), strings.Join(strings.Fields(job.Description), " "),
+		strings.ToLower(strings.TrimSpace(job.Title)),
+		strings.ToLower(strings.TrimSpace(job.Company)),
+		strings.ToLower(strings.TrimSpace(job.City)),
+		strconv.FormatInt(job.SalaryMin, 10),
+		strconv.FormatInt(job.SalaryMax, 10),
+		string(job.WorkMode),
+		strings.Join(normalizeSkills(job.Skills), ","),
+		strings.Join(strings.Fields(job.Description), " "),
 	}, "|")
 	hash := sha256.Sum256([]byte(data))
 	return hex.EncodeToString(hash[:])
@@ -59,7 +79,9 @@ func canonicalizeURL(rawURL string) string {
 	return parsed.String()
 }
 
-func cleanText(value string) string { return strings.Join(strings.Fields(value), " ") }
+func cleanText(value string) string {
+	return strings.Join(strings.Fields(value), " ")
+}
 
 func normalizeSkills(skills []string) []string {
 	seen := map[string]bool{}

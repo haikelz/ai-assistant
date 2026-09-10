@@ -7,7 +7,9 @@ import (
 	"ai-assistant/internal/domains/jobsearch/domain"
 )
 
-type MatchEngine struct{ threshold float64 }
+type MatchEngine struct {
+	threshold float64
+}
 
 func NewMatchEngine(threshold float64) *MatchEngine {
 	if threshold <= 0 {
@@ -16,7 +18,11 @@ func NewMatchEngine(threshold float64) *MatchEngine {
 	return &MatchEngine{threshold: threshold}
 }
 
-func (e *MatchEngine) Rank(jobs []domain.NormalizedJob, classifications []domain.Classification, criteria domain.Criteria) []domain.MatchResult {
+func (e *MatchEngine) Rank(
+	jobs []domain.NormalizedJob,
+	classifications []domain.Classification,
+	criteria domain.Criteria,
+) []domain.MatchResult {
 	byID := make(map[string]domain.Classification, len(classifications))
 	for _, classification := range classifications {
 		byID[classification.JobID] = classification
@@ -25,15 +31,28 @@ func (e *MatchEngine) Rank(jobs []domain.NormalizedJob, classifications []domain
 	for _, job := range jobs {
 		classification := byID[job.ID]
 		if classification.JobID == "" {
-			classification = domain.Classification{JobID: job.ID, AIRelevance: 50, HalalStatus: domain.HalalStatusNeedsReview}
+			classification = domain.Classification{
+				JobID:       job.ID,
+				AIRelevance: 50,
+				HalalStatus: domain.HalalStatusNeedsReview,
+			}
 		}
-		result := domain.MatchResult{Job: job, Classification: classification}
+		result := domain.MatchResult{
+			Job:            job,
+			Classification: classification,
+		}
 		result.SkillScore = skillScore(job, criteria.Skills)
 		result.RoleScore = roleScore(job, criteria.Positions)
 		result.WorkModeScore = workModeScore(job, criteria)
 		result.SalaryScore = salaryScore(job, criteria.MinSalary)
 		result.LocationScore = locationScore(job, criteria.Locations)
-		result.FinalScore = 0.35*clamp(classification.AIRelevance) + 0.30*result.SkillScore + 0.15*result.RoleScore + 0.10*result.WorkModeScore + 0.05*result.SalaryScore + 0.05*result.LocationScore
+		result.FinalScore =
+			0.35*clamp(classification.AIRelevance) +
+				0.30*result.SkillScore +
+				0.15*result.RoleScore +
+				0.10*result.WorkModeScore +
+				0.05*result.SalaryScore +
+				0.05*result.LocationScore
 		threshold := e.threshold
 		if criteria.MinMatchScore > 0 {
 			threshold = criteria.MinMatchScore

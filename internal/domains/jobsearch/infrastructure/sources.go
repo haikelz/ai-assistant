@@ -29,9 +29,15 @@ func NewKitalulus(client *http.Client, baseURL string) *Kitalulus {
 	if baseURL == "" {
 		baseURL = "https://kitalulus.com/lowongan"
 	}
-	return &Kitalulus{client, strings.TrimRight(baseURL, "/")}
+	return &Kitalulus{
+		client: client,
+		base:   strings.TrimRight(baseURL, "/"),
+	}
 }
-func (*Kitalulus) Name() string { return "kitalulus" }
+
+func (*Kitalulus) Name() string {
+	return "kitalulus"
+}
 
 var cardRE = regexp.MustCompile(`<a[^>]*href="/lowongan/detail/([^"]+)"[^>]*>(.*?)</a>`)
 var titleRE = regexp.MustCompile(`<h3[^>]*>(.*?)</h3>`)
@@ -103,7 +109,11 @@ func parseKitalulus(body, base string) []domain.Job {
 				d = append(d, v)
 			}
 		}
-		j := domain.Job{Title: title, URL: origin + "/lowongan/detail/" + m[1], Source: "kitalulus"}
+		j := domain.Job{
+			Title:  title,
+			URL:    origin + "/lowongan/detail/" + m[1],
+			Source: "kitalulus",
+		}
 		if len(d) > 0 {
 			j.Company = strings.TrimSpace(strings.SplitN(d[0], " - ", 2)[0])
 		}
@@ -130,9 +140,15 @@ func NewDealls(client *http.Client, baseURL string) *Dealls {
 	if baseURL == "" {
 		baseURL = "https://dealls.com/loker"
 	}
-	return &Dealls{client, strings.TrimRight(baseURL, "/")}
+	return &Dealls{
+		client: client,
+		base:   strings.TrimRight(baseURL, "/"),
+	}
 }
-func (*Dealls) Name() string { return "dealls" }
+
+func (*Dealls) Name() string {
+	return "dealls"
+}
 
 var nextRE = regexp.MustCompile(`<script id="__NEXT_DATA__"[^>]*>(.*?)</script>`)
 
@@ -192,13 +208,26 @@ func (d *Dealls) Fetch(ctx context.Context, c domain.Criteria) ([]domain.Job, er
 				for _, s := range j.Skills {
 					skills = append(skills, s.Name)
 				}
-				out = append(out, domain.Job{Title: j.Role, Company: j.Company.Name, Location: j.City.Name, URL: fmt.Sprintf("%s/loker/%s~%s", origin, j.Slug, j.Company.Slug), Source: "dealls", Salary: salary(j.SalaryRange), Type: strings.Join(j.EmploymentTypes, ", "), Skills: strings.Join(skills, ", "), PostedAt: j.PublishedAt})
+				out = append(out, domain.Job{
+					Title:    j.Role,
+					Company:  j.Company.Name,
+					Location: j.City.Name,
+					URL:      fmt.Sprintf("%s/loker/%s~%s", origin, j.Slug, j.Company.Slug),
+					Source:   "dealls",
+					Salary:   salary(j.SalaryRange),
+					Type:     strings.Join(j.EmploymentTypes, ", "),
+					Skills:   strings.Join(skills, ", "),
+					PostedAt: j.PublishedAt,
+				})
 			}
 		}
 	}
 	return out, nil
 }
-func salary(r *struct{ Start, End int }) string {
+func salary(r *struct {
+	Start int
+	End   int
+}) string {
 	if r == nil || (r.Start == 0 && r.End == 0) {
 		return ""
 	}

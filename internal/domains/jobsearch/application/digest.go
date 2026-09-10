@@ -34,7 +34,14 @@ func FormatDigest(matches []domain.MatchResult) string {
 	if len(other) > 0 {
 		fmt.Fprintf(&builder, "📌 Lowongan Relevan Lainnya (%d lowongan)\n\n", len(other))
 		for _, match := range other {
-			fmt.Fprintf(&builder, "- %s — %s%s (Match %.0f%%)\n", cleanLine(match.Job.Title), cleanLine(match.Job.Company), halalLabelForMatch(match.Classification), match.FinalScore)
+			fmt.Fprintf(
+				&builder,
+				"- %s — %s%s (Match %.0f%%)\n",
+				cleanLine(match.Job.Title),
+				cleanLine(match.Job.Company),
+				halalLabelForMatch(match.Classification),
+				match.FinalScore,
+			)
 			fmt.Fprintf(&builder, "  🔗 %s\n", match.Job.CanonicalURL)
 		}
 	}
@@ -124,4 +131,6 @@ func titleWorkMode(mode domain.WorkMode) string {
 	return strings.ToUpper(value[:1]) + value[1:]
 }
 
-func cleanLine(value string) string { return strings.Join(strings.Fields(value), " ") }
+func cleanLine(value string) string {
+	return strings.Join(strings.Fields(value), " ")
+}

@@ -17,7 +17,7 @@ func TestAIAssessorReadsSumopodResponsesSSE(t *testing.T) {
 		fmt.Fprintln(w, `data: {"type":"response.completed","response":{"output":[{"content":[{"text":"[{\"company\":\"Company A\",\"status\":\"halal\",\"reason\":\"Teknologi\"}]"}]}]}}`)
 	}))
 	defer server.Close()
-	assessor := NewAIAssessor(server.Client(), Config{Provider: "sumopod", Model: "gpt-5.6-luna", SumopodAPIKey: "key", SumopodURL: server.URL})
+	assessor := NewAIAssessor(server.Client(), AIProviderConfig{Provider: "sumopod", Model: "gpt-5.6-luna", SumopodAPIKey: "key", SumopodURL: server.URL})
 	jobs, err := assessor.Assess(t.Context(), []domain.Job{{Company: "Company A", Title: "Engineer"}})
 	if err != nil {
 		t.Fatal(err)
@@ -28,7 +28,7 @@ func TestAIAssessorReadsSumopodResponsesSSE(t *testing.T) {
 }
 
 func TestAIAssessorWithoutModelNeedsResearch(t *testing.T) {
-	jobs, err := NewAIAssessor(nil, Config{}).Assess(t.Context(), []domain.Job{{Company: "A"}})
+	jobs, err := NewAIAssessor(nil, AIProviderConfig{}).Assess(t.Context(), []domain.Job{{Company: "A"}})
 	if err != nil || jobs[0].HalalStatus != domain.HalalStatusNeedsReview {
 		t.Fatalf("jobs=%#v err=%v", jobs, err)
 	}
@@ -51,7 +51,7 @@ func TestAIAssessorUsesDynamicOpenAIModel(t *testing.T) {
 		fmt.Fprint(w, `{"output":[{"content":[{"text":"[{\"company\":\"A\",\"status\":\"halal\",\"reason\":\"Teknologi\"}]"}]}]}`)
 	}))
 	defer server.Close()
-	jobs, err := NewAIAssessor(server.Client(), Config{Provider: "openai", Model: "gpt-dynamic", OpenAIAPIKey: "openai-key", OpenAIURL: server.URL}).Assess(t.Context(), []domain.Job{{Company: "A"}})
+	jobs, err := NewAIAssessor(server.Client(), AIProviderConfig{Provider: "openai", Model: "gpt-dynamic", OpenAIAPIKey: "openai-key", OpenAIURL: server.URL}).Assess(t.Context(), []domain.Job{{Company: "A"}})
 	if err != nil || jobs[0].HalalStatus != domain.HalalStatusHalal {
 		t.Fatalf("jobs=%#v err=%v", jobs, err)
 	}
@@ -65,14 +65,14 @@ func TestAIAssessorUsesGeminiEndpoint(t *testing.T) {
 		fmt.Fprint(w, `{"candidates":[{"content":{"parts":[{"text":"[{\"company\":\"A\",\"status\":\"tidak_halal\",\"reason\":\"Bank\"}]"}]}}]}`)
 	}))
 	defer server.Close()
-	jobs, err := NewAIAssessor(server.Client(), Config{Provider: "google", Model: "gemini-dynamic", GoogleAPIKey: "google-key", GoogleURL: server.URL}).Assess(t.Context(), []domain.Job{{Company: "A"}})
+	jobs, err := NewAIAssessor(server.Client(), AIProviderConfig{Provider: "google", Model: "gemini-dynamic", GoogleAPIKey: "google-key", GoogleURL: server.URL}).Assess(t.Context(), []domain.Job{{Company: "A"}})
 	if err != nil || jobs[0].HalalStatus != domain.HalalStatusNotHalal {
 		t.Fatalf("jobs=%#v err=%v", jobs, err)
 	}
 }
 
 func TestAIAssessorRejectsMalformedProviderEndpoint(t *testing.T) {
-	assessor := NewAIAssessor(nil, Config{Provider: "sumopod", Model: "gpt-test", SumopodAPIKey: "key", SumopodURL: "://invalid"})
+	assessor := NewAIAssessor(nil, AIProviderConfig{Provider: "sumopod", Model: "gpt-test", SumopodAPIKey: "key", SumopodURL: "://invalid"})
 	_, err := assessor.Assess(t.Context(), []domain.Job{{Company: "A"}})
 	if err == nil || !strings.Contains(err.Error(), "create sumopod assessment request") {
 		t.Fatalf("error=%v", err)
@@ -96,7 +96,7 @@ func TestAIAssessorOrdersCompaniesDeterministically(t *testing.T) {
 		}
 	}))
 	defer server.Close()
-	assessor := NewAIAssessor(server.Client(), Config{Provider: "sumopod", Model: "gpt-test", SumopodAPIKey: "key", SumopodURL: server.URL})
+	assessor := NewAIAssessor(server.Client(), AIProviderConfig{Provider: "sumopod", Model: "gpt-test", SumopodAPIKey: "key", SumopodURL: server.URL})
 	if _, err := assessor.Assess(t.Context(), []domain.Job{{Company: "Z Company"}, {Company: "A Company"}}); err != nil {
 		t.Fatal(err)
 	}

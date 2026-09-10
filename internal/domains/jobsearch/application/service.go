@@ -13,33 +13,47 @@ type Source interface {
 	Name() string
 	Fetch(context.Context, domain.Criteria) ([]domain.Job, error)
 }
+
 type Assessor interface {
 	Assess(context.Context, []domain.Job) ([]domain.Job, error)
 }
+
 type Messenger interface {
 	Send(context.Context, string) error
 }
-type Service struct {
+
+type JobSearchService struct {
 	sources   []Source
 	assessor  Assessor
 	messenger Messenger
 	logger    *log.Logger
 }
 
-func NewService(sources []Source, assessor Assessor, messenger Messenger, logger *log.Logger) *Service {
-	return &Service{append([]Source(nil), sources...), assessor, messenger, logger}
+func NewJobSearchService(
+	sources []Source,
+	assessor Assessor,
+	messenger Messenger,
+	logger *log.Logger,
+) *JobSearchService {
+	return &JobSearchService{
+		sources:   append([]Source(nil), sources...),
+		assessor:  assessor,
+		messenger: messenger,
+		logger:    logger,
+	}
 }
 
 const SearchAcknowledgement = "Mencari lowongan di Kitalulus dan Dealls. Hasil akan dikirim ke chat kamu."
 
-func (s *Service) AcknowledgeSearch(ctx context.Context) error {
+func (s *JobSearchService) AcknowledgeSearch(ctx context.Context) error {
 	if s.messenger == nil {
 		return nil
 	}
+
 	return s.messenger.Send(ctx, s.searchAcknowledgement())
 }
 
-func (s *Service) searchAcknowledgement() string {
+func (s *JobSearchService) searchAcknowledgement() string {
 	names := make([]string, 0, len(s.sources))
 	for _, source := range s.sources {
 		switch source.Name() {
@@ -51,6 +65,7 @@ func (s *Service) searchAcknowledgement() string {
 			names = append(names, "LinkedIn")
 		}
 	}
+
 	if len(names) == 0 {
 		return SearchAcknowledgement
 	}
@@ -70,78 +85,100 @@ func joinIndonesian(values []string) string {
 	}
 }
 
-func (s *Service) Search(ctx context.Context, c domain.Criteria) (domain.Result, error) {
-	type fetched struct {
-		name string
-		jobs []domain.Job
-	}
-	ch := make(chan fetched, len(s.sources))
-	var wg sync.WaitGroup
-	for _, src := range s.sources {
-		wg.Add(1)
-		go func(src Source) {
-			defer wg.Done()
-			jobs, err := src.Fetch(ctx, c)
+type sourceFetchResult struct {
+	name string
+	jobs []domain.Job
+}
+
+func (s *JobSearchService) Search(ctx context.Context, criteria domain.Criteria) (domain.Result, error) {
+	results := make(chan sourceFetchResult, len(s.sources))
+
+	var waitGroup sync.WaitGroup
+	for _, source := range s.sources {
+		waitGroup.Add(1)
+		go func(source Source) {
+			defer waitGroup.Done()
+
+			jobs, err := source.Fetch(ctx, criteria)
 			if err != nil {
 				if s.logger != nil {
-					s.logger.Printf("jobsearch: %s fetch: %v", src.Name(), err)
+					s.logger.Printf("jobsearch: %s fetch: %v", source.Name(), err)
 				}
 				if len(jobs) == 0 {
 					jobs = nil
 				}
 			}
-			ch <- fetched{src.Name(), domain.FilterAndSort(jobs, c, 20)}
-		}(src)
+
+			results <- sourceFetchResult{
+				name: source.Name(),
+				jobs: domain.FilterAndSort(jobs, criteria, 20),
+			}
+		}(source)
 	}
-	wg.Wait()
-	close(ch)
-	var r domain.Result
-	for f := range ch {
-		switch f.name {
+
+	waitGroup.Wait()
+	close(results)
+
+	var result domain.Result
+	for fetched := range results {
+		switch fetched.name {
 		case "kitalulus":
-			r.Kitalulus = f.jobs
+			result.Kitalulus = fetched.jobs
 		case "dealls":
-			r.Dealls = f.jobs
+			result.Dealls = fetched.jobs
 		case "linkedin":
-			r.LinkedIn = f.jobs
-			r.LinkedInIncluded = true
+			result.LinkedIn = fetched.jobs
+			result.LinkedInIncluded = true
 		}
 	}
-	if c.Halal && s.assessor != nil {
-		kitalulusCount, deallsCount := len(r.Kitalulus), len(r.Dealls)
-		all := append(append(append([]domain.Job{}, r.Kitalulus...), r.Dealls...), r.LinkedIn...)
-		for i := range all {
-			all[i].HalalStatus = domain.HalalStatusNeedsReview
+
+	if criteria.Halal && s.assessor != nil {
+		kitalulusCount := len(result.Kitalulus)
+		deallsCount := len(result.Dealls)
+		allJobs := append([]domain.Job{}, result.Kitalulus...)
+		allJobs = append(allJobs, result.Dealls...)
+		allJobs = append(allJobs, result.LinkedIn...)
+
+		for index := range allJobs {
+			allJobs[index].HalalStatus = domain.HalalStatusNeedsReview
 		}
-		copy(r.Kitalulus, all[:kitalulusCount])
-		copy(r.Dealls, all[kitalulusCount:kitalulusCount+deallsCount])
-		copy(r.LinkedIn, all[kitalulusCount+deallsCount:])
-		assessed, err := s.assessor.Assess(ctx, all)
+
+		copy(result.Kitalulus, allJobs[:kitalulusCount])
+		copy(result.Dealls, allJobs[kitalulusCount:kitalulusCount+deallsCount])
+		copy(result.LinkedIn, allJobs[kitalulusCount+deallsCount:])
+
+		assessed, err := s.assessor.Assess(ctx, allJobs)
 		if err != nil {
 			if s.logger != nil {
 				s.logger.Printf("jobsearch: assessment: %v", err)
 			}
-		} else {
-			if len(assessed) == len(all) {
-				copy(r.Kitalulus, assessed[:kitalulusCount])
-				copy(r.Dealls, assessed[kitalulusCount:kitalulusCount+deallsCount])
-				copy(r.LinkedIn, assessed[kitalulusCount+deallsCount:])
-			}
+			return result, nil
+		}
+
+		if len(assessed) == len(allJobs) {
+			copy(result.Kitalulus, assessed[:kitalulusCount])
+			copy(result.Dealls, assessed[kitalulusCount:kitalulusCount+deallsCount])
+			copy(result.LinkedIn, assessed[kitalulusCount+deallsCount:])
 		}
 	}
-	return r, nil
+
+	return result, nil
 }
-func (s *Service) SearchAndDeliver(ctx context.Context, c domain.Criteria) error {
-	r, err := s.Search(ctx, c)
+
+func (s *JobSearchService) SearchAndDeliver(ctx context.Context, criteria domain.Criteria) error {
+	result, err := s.Search(ctx, criteria)
 	if err != nil {
 		return err
 	}
-	g := "Selamat pagi! ☀️ Berikut update lowongan kerja terbaru hari ini:"
-	if c.Interactive {
-		g = "Berikut hasil pencarian lowongan kerja:"
+
+	greeting := "Selamat pagi! ☀️ Berikut update lowongan kerja terbaru hari ini:"
+	if criteria.Interactive {
+		greeting = "Berikut hasil pencarian lowongan kerja:"
 	}
+
 	if s.messenger == nil {
 		return nil
 	}
-	return s.messenger.Send(ctx, domain.FormatMessage(g, r))
+
+	return s.messenger.Send(ctx, domain.FormatMessage(greeting, result))
 }

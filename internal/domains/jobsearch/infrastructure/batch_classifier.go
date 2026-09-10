@@ -20,7 +20,10 @@ func NewBatchClassifier(assessor *AIAssessor, batchSize int) *BatchClassifier {
 	if batchSize < 1 || batchSize > 10 {
 		batchSize = 5
 	}
-	return &BatchClassifier{assessor: assessor, batchSize: batchSize}
+	return &BatchClassifier{
+		assessor:  assessor,
+		batchSize: batchSize,
+	}
 }
 
 func (b *BatchClassifier) Classify(ctx context.Context, jobs []domain.NormalizedJob, criteria domain.Criteria) ([]domain.Classification, error) {
@@ -31,7 +34,15 @@ func (b *BatchClassifier) Classify(ctx context.Context, jobs []domain.Normalized
 	if b.assessor == nil || strings.TrimSpace(b.assessor.config.Model) == "" {
 		return fallbackClassifications(jobs), nil
 	}
-	criteriaJSON := map[string]any{"positions": criteria.Positions, "skills": criteria.Skills, "locations": criteria.Locations, "max_years": criteria.MaxYears, "work_modes": criteria.WorkModes, "min_salary": criteria.MinSalary}
+
+	criteriaJSON := map[string]any{
+		"positions":  criteria.Positions,
+		"skills":     criteria.Skills,
+		"locations":  criteria.Locations,
+		"max_years":  criteria.MaxYears,
+		"work_modes": criteria.WorkModes,
+		"min_salary": criteria.MinSalary,
+	}
 	for start := 0; start < len(jobs); start += b.batchSize {
 		end := start + b.batchSize
 		if end > len(jobs) {
@@ -39,8 +50,20 @@ func (b *BatchClassifier) Classify(ctx context.Context, jobs []domain.Normalized
 		}
 		requestJobs := make([]map[string]any, 0, end-start)
 		for _, job := range jobs[start:end] {
-			requestJobs = append(requestJobs, map[string]any{"job_id": job.ID, "title": job.Title, "company": job.Company, "description": job.Description, "city": job.City, "work_mode": job.WorkMode, "salary_min": job.SalaryMin, "salary_max": job.SalaryMax, "min_years_exp": job.MinYearsExp, "skills": job.Skills})
+			requestJobs = append(requestJobs, map[string]any{
+				"job_id":        job.ID,
+				"title":         job.Title,
+				"company":       job.Company,
+				"description":   job.Description,
+				"city":          job.City,
+				"work_mode":     job.WorkMode,
+				"salary_min":    job.SalaryMin,
+				"salary_max":    job.SalaryMax,
+				"min_years_exp": job.MinYearsExp,
+				"skills":        job.Skills,
+			})
 		}
+
 		input, err := json.Marshal(map[string]any{"criteria": criteriaJSON, "jobs": requestJobs})
 		if err != nil {
 			return append(result, fallbackClassifications(jobs[start:])...), fmt.Errorf("encode jobs for classification: %w", err)
@@ -72,7 +95,18 @@ func (b *BatchClassifier) Classify(ctx context.Context, jobs []domain.Normalized
 			if status != domain.HalalStatusHalal && status != domain.HalalStatusNotHalal && status != domain.HalalStatusNeedsReview {
 				status = domain.HalalStatusNeedsReview
 			}
-			byID[item.JobID] = domain.Classification{JobID: item.JobID, Category: item.Category, Seniority: item.Seniority, Summary: strings.Join(strings.Fields(item.Summary), " "), AIRelevance: item.RelevanceScore, SkillMatch: item.SkillMatchScore, MatchedSkills: item.MatchedSkills, MissingSkills: item.MissingSkills, HalalStatus: status, HalalReason: strings.Join(strings.Fields(item.HalalReason), " ")}
+			byID[item.JobID] = domain.Classification{
+				JobID:         item.JobID,
+				Category:      item.Category,
+				Seniority:     item.Seniority,
+				Summary:       strings.Join(strings.Fields(item.Summary), " "),
+				AIRelevance:   item.RelevanceScore,
+				SkillMatch:    item.SkillMatchScore,
+				MatchedSkills: item.MatchedSkills,
+				MissingSkills: item.MissingSkills,
+				HalalStatus:   status,
+				HalalReason:   strings.Join(strings.Fields(item.HalalReason), " "),
+			}
 		}
 		for _, job := range jobs[start:end] {
 			classification, ok := byID[job.ID]
@@ -94,5 +128,10 @@ func fallbackClassifications(jobs []domain.NormalizedJob) []domain.Classificatio
 }
 
 func fallbackClassification(job domain.NormalizedJob) domain.Classification {
-	return domain.Classification{JobID: job.ID, AIRelevance: 50, HalalStatus: domain.HalalStatusNeedsReview, Summary: "Penilaian AI belum tersedia; kecocokan dihitung dari data lowongan."}
+	return domain.Classification{
+		JobID:       job.ID,
+		AIRelevance: 50,
+		HalalStatus: domain.HalalStatusNeedsReview,
+		Summary:     "Penilaian AI belum tersedia; kecocokan dihitung dari data lowongan.",
+	}
 }

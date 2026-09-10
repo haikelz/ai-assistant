@@ -8,9 +8,15 @@ import (
 	"ai-assistant/internal/domains/finance/domain"
 )
 
-type SQLiteRepository struct{ db *sql.DB }
+type SQLiteRepository struct {
+	db *sql.DB
+}
 
-func NewSQLiteRepository(db *sql.DB) *SQLiteRepository { return &SQLiteRepository{db: db} }
+func NewSQLiteRepository(db *sql.DB) *SQLiteRepository {
+	return &SQLiteRepository{
+		db: db,
+	}
+}
 
 func InitializeDatabase(db *sql.DB) error {
 	_, err := db.Exec(`CREATE TABLE IF NOT EXISTS records (
@@ -26,7 +32,16 @@ func InitializeDatabase(db *sql.DB) error {
 }
 
 func (r *SQLiteRepository) Create(ctx context.Context, input domain.RecordInput, createdAt time.Time) (domain.Record, error) {
-	result, err := r.db.ExecContext(ctx, `INSERT INTO records (phone, type, amount, category, description, created_at) VALUES (?, ?, ?, ?, ?, ?)`, input.Phone, input.Type, input.Amount, input.Category, input.Description, createdAt)
+	result, err := r.db.ExecContext(
+		ctx,
+		`INSERT INTO records (phone, type, amount, category, description, created_at) VALUES (?, ?, ?, ?, ?, ?)`,
+		input.Phone,
+		input.Type,
+		input.Amount,
+		input.Category,
+		input.Description,
+		createdAt,
+	)
 	if err != nil {
 		return domain.Record{}, err
 	}
@@ -34,7 +49,16 @@ func (r *SQLiteRepository) Create(ctx context.Context, input domain.RecordInput,
 	if err != nil {
 		return domain.Record{}, err
 	}
-	return domain.Record{ID: id, Phone: input.Phone, Type: input.Type, Amount: input.Amount, Category: input.Category, Description: input.Description, CreatedAt: createdAt}, nil
+
+	return domain.Record{
+		ID:          id,
+		Phone:       input.Phone,
+		Type:        input.Type,
+		Amount:      input.Amount,
+		Category:    input.Category,
+		Description: input.Description,
+		CreatedAt:   createdAt,
+	}, nil
 }
 
 func (r *SQLiteRepository) Totals(ctx context.Context, phone string) (domain.Totals, error) {
@@ -49,11 +73,16 @@ func (r *SQLiteRepository) Totals(ctx context.Context, phone string) (domain.Tot
 }
 
 func (r *SQLiteRepository) Records(ctx context.Context, phone string) ([]domain.Record, error) {
-	rows, err := r.db.QueryContext(ctx, `SELECT id, phone, type, amount, category, description, created_at FROM records WHERE phone = ? ORDER BY created_at, id`, phone)
+	rows, err := r.db.QueryContext(
+		ctx,
+		`SELECT id, phone, type, amount, category, description, created_at FROM records WHERE phone = ? ORDER BY created_at, id`,
+		phone,
+	)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
+
 	var records []domain.Record
 	for rows.Next() {
 		var item domain.Record
@@ -65,4 +94,6 @@ func (r *SQLiteRepository) Records(ctx context.Context, phone string) ([]domain.
 	return records, rows.Err()
 }
 
-func (r *SQLiteRepository) Ping(ctx context.Context) error { return r.db.PingContext(ctx) }
+func (r *SQLiteRepository) Ping(ctx context.Context) error {
+	return r.db.PingContext(ctx)
+}

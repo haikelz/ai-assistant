@@ -6,13 +6,17 @@ import (
 	"ai-assistant/internal/domains/jobsearch/domain"
 )
 
-type SearchPlanner struct{ maxQueries int }
+type SearchPlanner struct {
+	maxQueries int
+}
 
 func NewSearchPlanner(maxQueries int) *SearchPlanner {
 	if maxQueries < 1 {
 		maxQueries = 5
 	}
-	return &SearchPlanner{maxQueries: maxQueries}
+	return &SearchPlanner{
+		maxQueries: maxQueries,
+	}
 }
 
 func (p *SearchPlanner) Plan(criteria domain.Criteria) []domain.SearchQuery {
@@ -23,7 +27,12 @@ func (p *SearchPlanner) Plan(criteria domain.Criteria) []domain.SearchQuery {
 		key := strings.ToLower(keyword + "|" + location)
 		if keyword != "" && !seen[key] && len(queries) < p.maxQueries {
 			seen[key] = true
-			queries = append(queries, domain.SearchQuery{Keyword: keyword, Location: location, MaxYears: criteria.MaxYears, WorkModes: append([]domain.WorkMode(nil), criteria.WorkModes...)})
+			queries = append(queries, domain.SearchQuery{
+				Keyword:   keyword,
+				Location:  location,
+				MaxYears:  criteria.MaxYears,
+				WorkModes: append([]domain.WorkMode(nil), criteria.WorkModes...),
+			})
 		}
 	}
 	location := ""

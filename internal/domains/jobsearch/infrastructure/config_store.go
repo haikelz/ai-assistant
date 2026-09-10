@@ -13,7 +13,9 @@ import (
 	"ai-assistant/internal/domains/jobsearch/domain"
 )
 
-type JSONAlertConfigStore struct{ path string }
+type JSONAlertConfigStore struct {
+	path string
+}
 
 func NewJSONAlertConfigStore(path string) *JSONAlertConfigStore {
 	return &JSONAlertConfigStore{path: path}

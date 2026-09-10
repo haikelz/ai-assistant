@@ -35,7 +35,21 @@ func (m fakeMessenger) Send(_ context.Context, s string) error { m.ch <- s; retu
 func TestServiceOrchestratesAndKeepsFailedSection(t *testing.T) {
 	a := &fakeAssessor{}
 	m := fakeMessenger{make(chan string, 1)}
-	s := NewService([]Source{fakeSource{"kitalulus", []domain.Job{{Title: "Go Engineer", Company: "A"}}, nil}, fakeSource{"dealls", nil, errors.New("down")}}, a, m, nil)
+	s := NewJobSearchService([]Source{
+		fakeSource{
+			name: "kitalulus",
+			jobs: []domain.Job{
+				{
+					Title:   "Go Engineer",
+					Company: "A",
+				},
+			},
+		},
+		fakeSource{
+			name: "dealls",
+			err:  errors.New("down"),
+		},
+	}, a, m, nil)
 	c := domain.Criteria{Skills: []string{"go"}, Halal: true, Interactive: true}
 	if err := s.SearchAndDeliver(context.Background(), c); err != nil {
 		t.Fatal(err)
@@ -48,7 +62,7 @@ func TestServiceOrchestratesAndKeepsFailedSection(t *testing.T) {
 
 func TestServiceSendsSearchAcknowledgement(t *testing.T) {
 	messenger := fakeMessenger{make(chan string, 1)}
-	service := NewService(nil, nil, messenger, nil)
+	service := NewJobSearchService(nil, nil, messenger, nil)
 	if err := service.AcknowledgeSearch(t.Context()); err != nil {
 		t.Fatal(err)
 	}
@@ -59,7 +73,11 @@ func TestServiceSendsSearchAcknowledgement(t *testing.T) {
 
 func TestServiceAcknowledgementNamesEnabledLinkedInSource(t *testing.T) {
 	messenger := fakeMessenger{make(chan string, 1)}
-	service := NewService([]Source{fakeSource{name: "kitalulus"}, fakeSource{name: "dealls"}, fakeSource{name: "linkedin"}}, nil, messenger, nil)
+	service := NewJobSearchService([]Source{
+		fakeSource{name: "kitalulus"},
+		fakeSource{name: "dealls"},
+		fakeSource{name: "linkedin"},
+	}, nil, messenger, nil)
 	if err := service.AcknowledgeSearch(t.Context()); err != nil {
 		t.Fatal(err)
 	}
@@ -69,7 +87,18 @@ func TestServiceAcknowledgementNamesEnabledLinkedInSource(t *testing.T) {
 }
 
 func TestServiceKeepsPartialLinkedInResults(t *testing.T) {
-	service := NewService([]Source{fakeSource{name: "linkedin", jobs: []domain.Job{{Title: "Software Engineer", Source: "linkedin"}}, err: domain.ErrProviderBlocked}}, nil, nil, nil)
+	service := NewJobSearchService([]Source{
+		fakeSource{
+			name: "linkedin",
+			jobs: []domain.Job{
+				{
+					Title:  "Software Engineer",
+					Source: "linkedin",
+				},
+			},
+			err: domain.ErrProviderBlocked,
+		},
+	}, nil, nil, nil)
 	result, err := service.Search(t.Context(), domain.Criteria{Positions: []string{"Software Engineer"}})
 	if err != nil {
 		t.Fatal(err)

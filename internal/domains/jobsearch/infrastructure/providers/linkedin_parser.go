@@ -61,7 +61,16 @@ func linkedInJobFromNode(node *xhtml.Node, urn string) (domain.RawJob, bool) {
 	if timeNode := findNodeByTag(node, "time"); timeNode != nil {
 		publishedAt = parseLinkedInTime(nodeAttribute(timeNode, "datetime"))
 	}
-	return domain.RawJob{Source: "linkedin", ExternalID: externalID, URL: jobURL, Title: title, Company: company, Location: location, PublishedAt: publishedAt, FetchedAt: time.Now().UTC()}, true
+	return domain.RawJob{
+		Source:      "linkedin",
+		ExternalID:  externalID,
+		URL:         jobURL,
+		Title:       title,
+		Company:     company,
+		Location:    location,
+		PublishedAt: publishedAt,
+		FetchedAt:   time.Now().UTC(),
+	}, true
 }
 
 func enrichLinkedInJob(job *domain.RawJob, body []byte) error {
@@ -116,7 +125,20 @@ func linkedInLegacyJobs(rawJobs []domain.RawJob) []domain.Job {
 		if raw.PublishedAt != nil {
 			postedAt = raw.PublishedAt.Format(time.RFC3339)
 		}
-		jobs = append(jobs, domain.Job{Title: raw.Title, Company: raw.Company, Location: raw.Location, URL: raw.URL, Source: raw.Source, Salary: raw.SalaryText, Type: raw.EmploymentType, Experience: raw.ExperienceText, Skills: strings.Join(raw.Skills, ", "), PostedAt: postedAt, MinYearsExp: minimumYears, MaxYearsExp: maximumYears})
+		jobs = append(jobs, domain.Job{
+			Title:       raw.Title,
+			Company:     raw.Company,
+			Location:    raw.Location,
+			URL:         raw.URL,
+			Source:      raw.Source,
+			Salary:      raw.SalaryText,
+			Type:        raw.EmploymentType,
+			Experience:  raw.ExperienceText,
+			Skills:      strings.Join(raw.Skills, ", "),
+			PostedAt:    postedAt,
+			MinYearsExp: minimumYears,
+			MaxYearsExp: maximumYears,
+		})
 	}
 	return jobs
 }

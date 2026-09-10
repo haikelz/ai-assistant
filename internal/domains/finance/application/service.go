@@ -18,16 +18,19 @@ type Syncer interface {
 	Sync(context.Context, domain.Record) (domain.SyncStatus, error)
 }
 
-type Service struct {
+type FinanceService struct {
 	repository Repository
 	syncer     Syncer
 }
 
-func NewService(repository Repository, syncer Syncer) *Service {
-	return &Service{repository: repository, syncer: syncer}
+func NewFinanceService(repository Repository, syncer Syncer) *FinanceService {
+	return &FinanceService{
+		repository: repository,
+		syncer:     syncer,
+	}
 }
 
-func (s *Service) Create(ctx context.Context, input domain.RecordInput) (domain.Record, domain.SyncStatus, error) {
+func (s *FinanceService) Create(ctx context.Context, input domain.RecordInput) (domain.Record, domain.SyncStatus, error) {
 	if err := input.Validate(); err != nil {
 		return domain.Record{}, "", err
 	}
@@ -45,12 +48,14 @@ func (s *Service) Create(ctx context.Context, input domain.RecordInput) (domain.
 	return record, status, nil
 }
 
-func (s *Service) Totals(ctx context.Context, phone string) (domain.Totals, error) {
+func (s *FinanceService) Totals(ctx context.Context, phone string) (domain.Totals, error) {
 	return s.repository.Totals(ctx, phone)
 }
 
-func (s *Service) Records(ctx context.Context, phone string) ([]domain.Record, error) {
+func (s *FinanceService) Records(ctx context.Context, phone string) ([]domain.Record, error) {
 	return s.repository.Records(ctx, phone)
 }
 
-func (s *Service) Ping(ctx context.Context) error { return s.repository.Ping(ctx) }
+func (s *FinanceService) Ping(ctx context.Context) error {
+	return s.repository.Ping(ctx)
+}

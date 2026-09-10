@@ -8,15 +8,25 @@ import (
 	"github.com/gofiber/fiber/v2"
 )
 
-type Proxy interface {
+type ResponsesProxy interface {
 	Forward(context.Context, string, []byte) (domain.ProxyResponse, error)
 }
 
-type Handler struct{ proxy Proxy }
+type ResponsesProxyHandler struct {
+	proxy ResponsesProxy
+}
 
-func NewHandler(proxy Proxy) *Handler           { return &Handler{proxy: proxy} }
-func (h *Handler) Register(router fiber.Router) { router.Post("/openai/v1/responses", h.responses) }
-func (h *Handler) responses(c *fiber.Ctx) error {
+func NewResponsesProxyHandler(proxy ResponsesProxy) *ResponsesProxyHandler {
+	return &ResponsesProxyHandler{
+		proxy: proxy,
+	}
+}
+
+func (h *ResponsesProxyHandler) Register(router fiber.Router) {
+	router.Post("/openai/v1/responses", h.responses)
+}
+
+func (h *ResponsesProxyHandler) responses(c *fiber.Ctx) error {
 	response, err := h.proxy.Forward(c.UserContext(), c.Get(fiber.HeaderAuthorization), c.Body())
 	if err != nil {
 		if errors.Is(err, domain.ErrInvalidRequest) {
@@ -24,6 +34,7 @@ func (h *Handler) responses(c *fiber.Ctx) error {
 		}
 		return fiber.NewError(fiber.StatusBadGateway, "Sumopod request failed")
 	}
+
 	if response.ContentType != "" {
 		c.Set(fiber.HeaderContentType, response.ContentType)
 	}

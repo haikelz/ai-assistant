@@ -15,7 +15,9 @@ type JobProvider interface {
 	HealthCheck(context.Context) error
 }
 
-type QueryAwareProvider interface{ SupportsQueries() bool }
+type QueryAwareProvider interface {
+	SupportsQueries() bool
+}
 
 type JobStore interface {
 	Upsert(context.Context, domain.NormalizedJob) (domain.UpsertOutcome, error)
@@ -37,14 +39,30 @@ type IngestionPipeline struct {
 	logger      *log.Logger
 }
 
-func NewIngestionPipeline(planner *SearchPlanner, providers []JobProvider, store JobStore, timeout time.Duration, concurrency int, logger *log.Logger) *IngestionPipeline {
+func NewIngestionPipeline(
+	planner *SearchPlanner,
+	providers []JobProvider,
+	store JobStore,
+	timeout time.Duration,
+	concurrency int,
+	logger *log.Logger,
+) *IngestionPipeline {
 	if timeout <= 0 {
 		timeout = 10 * time.Second
 	}
 	if concurrency < 1 {
 		concurrency = 4
 	}
-	return &IngestionPipeline{planner: planner, providers: providers, store: store, prefilter: PreFilter{}, timeout: timeout, concurrency: concurrency, now: time.Now, logger: logger}
+	return &IngestionPipeline{
+		planner:     planner,
+		providers:   providers,
+		store:       store,
+		prefilter:   PreFilter{},
+		timeout:     timeout,
+		concurrency: concurrency,
+		now:         time.Now,
+		logger:      logger,
+	}
 }
 
 func (p *IngestionPipeline) Run(ctx context.Context, criteria domain.Criteria, deduplicate bool) (PipelineResult, error) {

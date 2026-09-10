@@ -23,9 +23,9 @@ func TestRecordsAndTotalsContract(t *testing.T) {
 	if err := infrastructure.InitializeDatabase(db); err != nil {
 		t.Fatal(err)
 	}
-	service := application.NewService(infrastructure.NewSQLiteRepository(db), infrastructure.DisabledSyncer{})
+	service := application.NewFinanceService(infrastructure.NewSQLiteRepository(db), infrastructure.DisabledSyncer{})
 	app := fiber.New()
-	NewHandler(service).Register(app)
+	NewFinanceHandler(service).Register(app)
 	for _, body := range []string{
 		`{"phone":"123","type":"modal","amount":5000000,"category":"Modal","description":"Gaji"}`,
 		`{"phone":"123","type":"income","amount":250000,"category":"Pendapatan","description":"Bonus"}`,

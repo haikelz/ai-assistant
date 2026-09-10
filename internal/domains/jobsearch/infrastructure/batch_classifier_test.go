@@ -38,7 +38,7 @@ func TestBatchClassifierLimitsJobsPerAIRequest(t *testing.T) {
 		fmt.Fprintf(response, `{"output":[{"content":[{"text":%s}]}]}`, text)
 	}))
 	defer server.Close()
-	assessor := NewAIAssessor(server.Client(), Config{Provider: "sumopod", Model: "model", SumopodAPIKey: "key", SumopodURL: server.URL})
+	assessor := NewAIAssessor(server.Client(), AIProviderConfig{Provider: "sumopod", Model: "model", SumopodAPIKey: "key", SumopodURL: server.URL})
 	classifier := NewBatchClassifier(assessor, 5)
 	jobs := make([]domain.NormalizedJob, 12)
 	for index := range jobs {

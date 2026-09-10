@@ -14,10 +14,14 @@ type Settings interface {
 	Current(context.Context) (domain.AlertConfig, error)
 }
 
-type SettingsHandler struct{ settings Settings }
+type SettingsHandler struct {
+	settings Settings
+}
 
 func NewSettingsHandler(settings Settings) *SettingsHandler {
-	return &SettingsHandler{settings: settings}
+	return &SettingsHandler{
+		settings: settings,
+	}
 }
 
 func (h *SettingsHandler) Register(router fiber.Router) {
@@ -29,12 +33,14 @@ func (h *SettingsHandler) update(c *fiber.Ctx) error {
 	if len(c.Body()) > 4096 {
 		return fiber.ErrRequestEntityTooLarge
 	}
+
 	var request struct {
 		Query string `json:"query"`
 	}
 	if err := c.BodyParser(&request); err != nil {
 		return fiber.ErrBadRequest
 	}
+
 	config, err := h.settings.Update(c.UserContext(), request.Query)
 	if errors.Is(err, domain.ErrInvalidAlertConfig) {
 		return fiber.NewError(fiber.StatusBadRequest, strings.TrimPrefix(err.Error(), domain.ErrInvalidAlertConfig.Error()+": "))
@@ -42,6 +48,7 @@ func (h *SettingsHandler) update(c *fiber.Ctx) error {
 	if err != nil {
 		return fiber.NewError(fiber.StatusInternalServerError, "gagal menyimpan konfigurasi job alert")
 	}
+
 	return c.JSON(fiber.Map{
 		"status":     "updated",
 		"message":    "Job alert diperbarui. Pencarian berjalan setiap hari pukul 03:00 WIB dengan label halal.",

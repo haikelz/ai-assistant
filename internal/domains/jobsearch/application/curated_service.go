@@ -39,12 +39,36 @@ type CuratedService struct {
 	now        func() time.Time
 }
 
-func NewCuratedService(ingestor Ingestor, classifier Classifier, matcher Matcher, runs AlertRunStore, messenger Messenger, logger *log.Logger) *CuratedService {
-	return &CuratedService{ingestor: ingestor, classifier: classifier, matcher: matcher, runs: runs, messenger: messenger, logger: logger, now: time.Now}
+func NewCuratedService(
+	ingestor Ingestor,
+	classifier Classifier,
+	matcher Matcher,
+	runs AlertRunStore,
+	messenger Messenger,
+	logger *log.Logger,
+) *CuratedService {
+	return &CuratedService{
+		ingestor:   ingestor,
+		classifier: classifier,
+		matcher:    matcher,
+		runs:       runs,
+		messenger:  messenger,
+		logger:     logger,
+		now:        time.Now,
+	}
 }
 
-func (s *CuratedService) Run(ctx context.Context, criteria domain.Criteria, deliver, deduplicate bool) (message string, run domain.AlertRun, err error) {
-	run = domain.AlertRun{ID: newRunID(), Status: domain.AlertRunRunning, StartedAt: s.now().UTC()}
+func (s *CuratedService) Run(
+	ctx context.Context,
+	criteria domain.Criteria,
+	deliver bool,
+	deduplicate bool,
+) (message string, run domain.AlertRun, err error) {
+	run = domain.AlertRun{
+		ID:        newRunID(),
+		Status:    domain.AlertRunRunning,
+		StartedAt: s.now().UTC(),
+	}
 	if err = s.runs.StartRun(ctx, run); err != nil {
 		return "", run, fmt.Errorf("start alert run: %w", err)
 	}

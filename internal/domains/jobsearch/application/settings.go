@@ -15,7 +15,9 @@ type AlertConfigStore interface {
 	Load(context.Context) (domain.AlertConfig, error)
 }
 
-type SettingsService struct{ store AlertConfigStore }
+type SettingsService struct {
+	store AlertConfigStore
+}
 
 func NewSettingsService(store AlertConfigStore) *SettingsService {
 	return &SettingsService{store: store}

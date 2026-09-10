@@ -10,10 +10,14 @@ type MessageSender interface {
 	Send(context.Context, string) error
 }
 
-type WhatsAppHandler struct{ messenger MessageSender }
+type WhatsAppHandler struct {
+	messenger MessageSender
+}
 
 func NewWhatsAppHandler(messenger MessageSender) *WhatsAppHandler {
-	return &WhatsAppHandler{messenger: messenger}
+	return &WhatsAppHandler{
+		messenger: messenger,
+	}
 }
 
 func (h *WhatsAppHandler) Register(router fiber.Router) {
@@ -24,9 +28,11 @@ func (h *WhatsAppHandler) send(c *fiber.Ctx) error {
 	if h.messenger == nil {
 		return fiber.NewError(fiber.StatusServiceUnavailable, "WhatsApp is disabled")
 	}
+
 	if len(c.Body()) > 256<<10 {
 		return fiber.ErrRequestEntityTooLarge
 	}
+
 	var request struct {
 		Message string `json:"message"`
 	}

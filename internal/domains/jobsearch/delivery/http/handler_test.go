@@ -48,7 +48,7 @@ func (f fakeDeliverer) SearchAndDeliver(ctx context.Context, c domain.Criteria) 
 func TestHandlerAcceptsAndStartsIndependentWork(t *testing.T) {
 	app := fiber.New()
 	f := fakeDeliverer{acknowledgementStarted: make(chan struct{}), releaseAcknowledgement: make(chan struct{}), criteria: make(chan domain.Criteria, 1)}
-	handler, err := NewHandler(t.Context(), f, log.New(io.Discard, "", 0))
+	handler, err := NewJobSearchHandler(t.Context(), f, log.New(io.Discard, "", 0))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -95,7 +95,10 @@ func TestHandlerCancelsAcceptedSearchDuringShutdown(t *testing.T) {
 	app := fiber.New()
 	searchStarted := make(chan domain.Criteria, 1)
 	searchCancelled := make(chan struct{})
-	handler, err := NewHandler(t.Context(), fakeDeliverer{criteria: searchStarted, searchCancelled: searchCancelled}, log.New(io.Discard, "", 0))
+	handler, err := NewJobSearchHandler(t.Context(), fakeDeliverer{
+		criteria:        searchStarted,
+		searchCancelled: searchCancelled,
+	}, log.New(io.Discard, "", 0))
 	if err != nil {
 		t.Fatal(err)
 	}

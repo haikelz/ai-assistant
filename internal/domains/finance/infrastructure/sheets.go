@@ -58,23 +58,31 @@ func NewGoogleSheetsSyncer(ctx context.Context, spreadsheetID, encodedCredential
 	if err != nil {
 		return nil, fmt.Errorf("load spreadsheet timezone: %w", err)
 	}
-	return &GoogleSheetsSyncer{service: service, spreadsheetID: spreadsheetID, location: location}, nil
+	return &GoogleSheetsSyncer{
+		service:       service,
+		spreadsheetID: spreadsheetID,
+		location:      location,
+	}, nil
 }
 
 func (s *GoogleSheetsSyncer) Sync(ctx context.Context, input domain.Record) (domain.SyncStatus, error) {
 	title := indonesianMonth(input.CreatedAt.In(s.location).Month())
+
 	sheetID, err := s.sheetID(ctx, title)
 	if err != nil {
 		return domain.SyncPending, err
 	}
+
 	values, err := s.service.Spreadsheets.Values.Get(s.spreadsheetID, sheetRange(title, "A:Z")).Context(ctx).Do()
 	if err != nil {
 		return domain.SyncPending, fmt.Errorf("read spreadsheet layout: %w", err)
 	}
+
 	layout, err := spreadsheetLayoutFromValues(values.Values)
 	if err != nil {
 		return domain.SyncPending, err
 	}
+
 	input.CreatedAt = input.CreatedAt.In(s.location)
 	row, err := spreadsheetRow(layout.headers, layout.nextRecordNumber, input)
 	if err != nil {
@@ -82,13 +90,37 @@ func (s *GoogleSheetsSyncer) Sync(ctx context.Context, input domain.Record) (dom
 	}
 	writeRow := layout.nextWriteRow
 	if layout.totalRow > 0 {
-		_, err = s.service.Spreadsheets.BatchUpdate(s.spreadsheetID, &sheets.BatchUpdateSpreadsheetRequest{Requests: []*sheets.Request{{InsertDimension: &sheets.InsertDimensionRequest{Range: &sheets.DimensionRange{SheetId: sheetID, Dimension: "ROWS", StartIndex: int64(layout.totalRow - 1), EndIndex: int64(layout.totalRow)}, InheritFromBefore: true}}}}).Context(ctx).Do()
+		request := &sheets.BatchUpdateSpreadsheetRequest{
+			Requests: []*sheets.Request{
+				{
+					InsertDimension: &sheets.InsertDimensionRequest{
+						Range: &sheets.DimensionRange{
+							SheetId:    sheetID,
+							Dimension:  "ROWS",
+							StartIndex: int64(layout.totalRow - 1),
+							EndIndex:   int64(layout.totalRow),
+						},
+						InheritFromBefore: true,
+					},
+				},
+			},
+		}
+
+		_, err = s.service.Spreadsheets.BatchUpdate(s.spreadsheetID, request).Context(ctx).Do()
 		if err != nil {
 			return domain.SyncPending, fmt.Errorf("insert spreadsheet row: %w", err)
 		}
 		writeRow = layout.totalRow
 	}
-	_, err = s.service.Spreadsheets.Values.Update(s.spreadsheetID, sheetRange(title, fmt.Sprintf("A%d", writeRow)), &sheets.ValueRange{Values: [][]any{row}}).ValueInputOption("USER_ENTERED").Context(ctx).Do()
+
+	valuesRange := &sheets.ValueRange{
+		Values: [][]any{row},
+	}
+	_, err = s.service.Spreadsheets.Values.Update(
+		s.spreadsheetID,
+		sheetRange(title, fmt.Sprintf("A%d", writeRow)),
+		valuesRange,
+	).ValueInputOption("USER_ENTERED").Context(ctx).Do()
 	if err != nil {
 		return domain.SyncPending, fmt.Errorf("write spreadsheet row: %w", err)
 	}
@@ -121,7 +153,11 @@ func spreadsheetLayoutFromValues(values [][]any) (spreadsheetLayout, error) {
 	if err := validateSpreadsheetHeaders(headers); err != nil {
 		return spreadsheetLayout{}, err
 	}
-	layout := spreadsheetLayout{headers: headers, nextRecordNumber: 1, nextWriteRow: len(values) + 1}
+	layout := spreadsheetLayout{
+		headers:          headers,
+		nextRecordNumber: 1,
+		nextWriteRow:     len(values) + 1,
+	}
 	for index, row := range values[1:] {
 		if len(row) == 0 {
 			continue

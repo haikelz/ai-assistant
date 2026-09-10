@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"io"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -98,9 +97,17 @@ func NewLinkedIn(client *http.Client, config LinkedInConfig) (*LinkedIn, error) 
 	return &LinkedIn{client: client, config: config}, nil
 }
 
-func (*LinkedIn) Source() string        { return "linkedin" }
-func (*LinkedIn) Name() string          { return "linkedin" }
-func (*LinkedIn) SupportsQueries() bool { return true }
+func (*LinkedIn) Source() string {
+	return "linkedin"
+}
+
+func (*LinkedIn) Name() string {
+	return "linkedin"
+}
+
+func (*LinkedIn) SupportsQueries() bool {
+	return true
+}
 
 func (l *LinkedIn) HealthCheck(ctx context.Context) error {
 	_, err := l.Search(ctx, domain.SearchQuery{Keyword: "software engineer"})
@@ -201,191 +208,4 @@ func (l *LinkedIn) buildSearchURL(query domain.SearchQuery, start int) (string, 
 	}
 	parsed.RawQuery = values.Encode()
 	return parsed.String(), nil
-}
-
-func (l *LinkedIn) get(ctx context.Context, endpoint string, limit int64) ([]byte, error) {
-	if err := l.wait(ctx); err != nil {
-		return nil, err
-	}
-	request, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
-	if err != nil {
-		return nil, fmt.Errorf("create LinkedIn request: %w", err)
-	}
-	request.Header.Set("User-Agent", linkedInUserAgent)
-	request.Header.Set("Accept", "text/html,application/xhtml+xml")
-	response, err := l.client.Do(request)
-	if err != nil {
-		return nil, fmt.Errorf("send LinkedIn request: %w", err)
-	}
-	body, readErr := io.ReadAll(io.LimitReader(response.Body, limit))
-	closeErr := response.Body.Close()
-	if readErr != nil || closeErr != nil {
-		return nil, errors.Join(wrapLinkedInError("read response", readErr), wrapLinkedInError("close response", closeErr))
-	}
-	if isLinkedInBlockedStatus(response.StatusCode) {
-		l.markBlocked()
-		return nil, fmt.Errorf("%w: LinkedIn status %d", domain.ErrProviderBlocked, response.StatusCode)
-	}
-	if response.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("LinkedIn status %d", response.StatusCode)
-	}
-	if isLinkedInChallenge(body) {
-		l.markBlocked()
-		return nil, fmt.Errorf("%w: LinkedIn challenge page", domain.ErrProviderBlocked)
-	}
-	return body, nil
-}
-
-func (l *LinkedIn) wait(ctx context.Context) error {
-	l.mutex.Lock()
-	defer l.mutex.Unlock()
-	if l.blocked {
-		return domain.ErrProviderBlocked
-	}
-	wait := l.config.MinInterval - time.Since(l.lastRequest)
-	if !l.lastRequest.IsZero() && wait > 0 {
-		timer := time.NewTimer(wait)
-		defer timer.Stop()
-		select {
-		case <-ctx.Done():
-			return ctx.Err()
-		case <-timer.C:
-		}
-	}
-	l.lastRequest = time.Now()
-	return nil
-}
-
-func (l *LinkedIn) markBlocked() {
-	l.mutex.Lock()
-	l.blocked = true
-	l.mutex.Unlock()
-}
-
-func validateLinkedInURL(name, value string) error {
-	parsed, err := url.ParseRequestURI(value)
-	if err != nil || (parsed.Scheme != "http" && parsed.Scheme != "https") || parsed.Host == "" {
-		return fmt.Errorf("LinkedIn %s URL must be an absolute HTTP URL", name)
-	}
-	return nil
-}
-
-func normalizeLinkedInJobTypes(values []string) ([]string, error) {
-	allowed := map[string]bool{"F": true, "P": true, "C": true, "T": true, "V": true, "I": true, "O": true}
-	seen := make(map[string]bool)
-	var normalized []string
-	for _, value := range values {
-		value = strings.ToUpper(strings.TrimSpace(value))
-		if value == "" {
-			continue
-		}
-		if !allowed[value] {
-			return nil, fmt.Errorf("unsupported LinkedIn job type %q", value)
-		}
-		if !seen[value] {
-			seen[value] = true
-			normalized = append(normalized, value)
-		}
-	}
-	return normalized, nil
-}
-
-func normalizeLinkedInCompanyIDs(values []string) ([]string, error) {
-	seen := make(map[string]bool)
-	var normalized []string
-	for _, value := range values {
-		value = strings.TrimSpace(value)
-		if value == "" {
-			continue
-		}
-		if _, err := strconv.ParseUint(value, 10, 64); err != nil {
-			return nil, fmt.Errorf("invalid LinkedIn company ID %q", value)
-		}
-		if !seen[value] {
-			seen[value] = true
-			normalized = append(normalized, value)
-		}
-	}
-	return normalized, nil
-}
-
-func linkedInExperienceLevels(maxYears int) []string {
-	switch {
-	case maxYears <= 0:
-		return nil
-	case maxYears <= 1:
-		return []string{"2"}
-	case maxYears <= 3:
-		return []string{"2", "3"}
-	case maxYears <= 6:
-		return []string{"2", "3", "4"}
-	default:
-		return []string{"3", "4", "5", "6"}
-	}
-}
-
-func linkedInWorkModes(values []domain.WorkMode) []string {
-	seen := make(map[string]bool)
-	var modes []string
-	for _, value := range values {
-		code := ""
-		switch value {
-		case domain.WorkModeOnsite:
-			code = "1"
-		case domain.WorkModeRemote:
-			code = "2"
-		case domain.WorkModeHybrid:
-			code = "3"
-		}
-		if code != "" && !seen[code] {
-			seen[code] = true
-			modes = append(modes, code)
-		}
-	}
-	return modes
-}
-
-func linkedInQueries(criteria domain.Criteria, maxQueries int) []domain.SearchQuery {
-	location := ""
-	if len(criteria.Locations) > 0 {
-		location = criteria.Locations[0]
-	}
-	seen := make(map[string]bool)
-	var queries []domain.SearchQuery
-	add := func(keyword string) {
-		keyword = strings.TrimSpace(keyword)
-		key := strings.ToLower(keyword + "|" + location)
-		if keyword != "" && !seen[key] && len(queries) < maxQueries {
-			seen[key] = true
-			queries = append(queries, domain.SearchQuery{Keyword: keyword, Location: location, MaxYears: criteria.MaxYears, WorkModes: append([]domain.WorkMode(nil), criteria.WorkModes...)})
-		}
-	}
-	for _, position := range criteria.Positions {
-		add(position)
-	}
-	for _, position := range criteria.Positions {
-		for _, skill := range criteria.Skills {
-			add(position + " " + skill)
-		}
-	}
-	if len(queries) == 0 {
-		add("software engineer")
-	}
-	return queries
-}
-
-func isLinkedInBlockedStatus(status int) bool {
-	return status == http.StatusUnauthorized || status == http.StatusForbidden || status == http.StatusTooManyRequests || status == 999
-}
-
-func isLinkedInChallenge(body []byte) bool {
-	value := strings.ToLower(string(body))
-	return strings.Contains(value, "captcha") || strings.Contains(value, "challenge") || strings.Contains(value, "verify you are human") || strings.Contains(value, "security verification")
-}
-
-func wrapLinkedInError(operation string, err error) error {
-	if err == nil {
-		return nil
-	}
-	return fmt.Errorf("%s: %w", operation, err)
 }

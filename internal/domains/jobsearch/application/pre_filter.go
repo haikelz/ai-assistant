@@ -24,7 +24,10 @@ func (PreFilter) Apply(jobs []domain.NormalizedJob, criteria domain.Criteria) []
 		if len(criteria.Locations) > 0 && strings.TrimSpace(job.City) != "" && !matchesAny(strings.ToLower(job.City), criteria.Locations, false) {
 			continue
 		}
-		if criteria.StrictWorkMode && len(criteria.WorkModes) > 0 && job.WorkMode != domain.WorkModeUnknown && !workModeAllowed(job.WorkMode, criteria.WorkModes) {
+		if criteria.StrictWorkMode &&
+			len(criteria.WorkModes) > 0 &&
+			job.WorkMode != domain.WorkModeUnknown &&
+			!workModeAllowed(job.WorkMode, criteria.WorkModes) {
 			continue
 		}
 		filtered = append(filtered, job)

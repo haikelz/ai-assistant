@@ -30,30 +30,47 @@ type Container struct {
 	DB                       *sql.DB
 	WhatsApp                 *jobinfra.WhatsAppGateway
 	FinanceApp, JobSearchApp *fiber.App
-	jobSearchHandler         *jobd.Handler
+	jobSearchHandler         *jobd.JobSearchHandler
 }
 
 func NewContainer(ctx context.Context, cfg config.Config) (*Container, error) {
 	if err := os.MkdirAll(filepath.Dir(cfg.DatabasePath), 0o700); err != nil {
 		return nil, fmt.Errorf("create finance database directory: %w", err)
 	}
+
 	db, err := sql.Open("sqlite", cfg.DatabasePath)
 	if err != nil {
 		return nil, fmt.Errorf("open finance database: %w", err)
 	}
+
 	if err := financeinfra.InitializeDatabase(db); err != nil {
 		return nil, errors.Join(fmt.Errorf("initialize finance database: %w", err), closeDatabase(db))
 	}
+
 	syncer, err := financeinfra.NewGoogleSheetsSyncer(ctx, cfg.SpreadsheetID, cfg.ServiceAccountBase64)
 	if err != nil {
 		return nil, errors.Join(fmt.Errorf("configure Google Sheets: %w", err), closeDatabase(db))
 	}
+
 	client := &http.Client{Timeout: 120 * time.Second}
-	financeService := financeapp.NewService(financeinfra.NewSQLiteRepository(db), syncer)
+	financeService := financeapp.NewFinanceService(financeinfra.NewSQLiteRepository(db), syncer)
 	proxy := aiinfra.NewSumopodProxy(client, cfg.SumopodResponsesURL)
-	assessor := jobinfra.NewAIAssessor(client, jobinfra.Config{Provider: cfg.AIProvider, Model: cfg.AIModel, SumopodAPIKey: cfg.SumopodAPIKey, OpenAIAPIKey: cfg.OpenAIAPIKey, GoogleAPIKey: cfg.GoogleAPIKey, SumopodURL: cfg.SumopodResponsesURL, OpenAIURL: cfg.OpenAIResponsesURL, GoogleURL: cfg.GoogleGenerativeURL})
+	assessor := jobinfra.NewAIAssessor(client, jobinfra.AIProviderConfig{
+		Provider:      cfg.AIProvider,
+		Model:         cfg.AIModel,
+		SumopodAPIKey: cfg.SumopodAPIKey,
+		OpenAIAPIKey:  cfg.OpenAIAPIKey,
+		GoogleAPIKey:  cfg.GoogleAPIKey,
+		SumopodURL:    cfg.SumopodResponsesURL,
+		OpenAIURL:     cfg.OpenAIResponsesURL,
+		GoogleURL:     cfg.GoogleGenerativeURL,
+	})
 	telegram := jobinfra.NewTelegram(client, cfg.TelegramBotToken, cfg.TelegramUserID, "")
-	jobSources := []jobapp.Source{jobinfra.NewKitalulus(client, ""), jobinfra.NewDealls(client, "")}
+	jobSources := []jobapp.Source{
+		jobinfra.NewKitalulus(client, ""),
+		jobinfra.NewDealls(client, ""),
+	}
+
 	if cfg.LinkedInEnabled {
 		linkedIn, linkedInErr := newLinkedInProvider(client, cfg)
 		if linkedInErr != nil {
@@ -61,6 +78,7 @@ func NewContainer(ctx context.Context, cfg config.Config) (*Container, error) {
 		}
 		jobSources = append(jobSources, linkedIn)
 	}
+
 	var whatsAppGateway *jobinfra.WhatsAppGateway
 	var whatsAppMessenger *jobinfra.WhatsApp
 	if cfg.WhatsAppRecipient != "" {
@@ -78,16 +96,18 @@ func NewContainer(ctx context.Context, cfg config.Config) (*Container, error) {
 			whatsAppMessenger = adapter
 		}
 	}
+
 	messenger := jobapp.NewMultiMessenger(interactiveJobDeliveries(telegram), log.Default())
-	jobService := jobapp.NewService(jobSources, assessor, messenger, log.Default())
+	jobService := jobapp.NewJobSearchService(jobSources, assessor, messenger, log.Default())
 	settingsService := jobapp.NewSettingsService(jobinfra.NewJSONAlertConfigStore(cfg.JobAlertConfigPath))
 
 	mainAPI := newFiber()
-	financed.NewHandler(financeService).Register(mainAPI)
-	aid.NewHandler(proxy).Register(mainAPI)
+	financed.NewFinanceHandler(financeService).Register(mainAPI)
+	aid.NewResponsesProxyHandler(proxy).Register(mainAPI)
 	jobAPI := newFiber()
 	jobAPI.Get("/health", func(c *fiber.Ctx) error { return c.SendStatus(fiber.StatusNoContent) })
-	jobSearchHandler, err := jobd.NewHandler(ctx, jobService, log.Default())
+
+	jobSearchHandler, err := jobd.NewJobSearchHandler(ctx, jobService, log.Default())
 	if err != nil {
 		var cleanupErrors []error
 		if whatsAppGateway != nil {
@@ -99,24 +119,46 @@ func NewContainer(ctx context.Context, cfg config.Config) (*Container, error) {
 	jobSearchHandler.Register(jobAPI)
 	jobd.NewSettingsHandler(settingsService).Register(jobAPI)
 	jobd.NewWhatsAppHandler(whatsAppMessenger).Register(jobAPI)
-	return &Container{Config: cfg, DB: db, WhatsApp: whatsAppGateway, FinanceApp: mainAPI, JobSearchApp: jobAPI, jobSearchHandler: jobSearchHandler}, nil
+
+	return &Container{
+		Config:           cfg,
+		DB:               db,
+		WhatsApp:         whatsAppGateway,
+		FinanceApp:       mainAPI,
+		JobSearchApp:     jobAPI,
+		jobSearchHandler: jobSearchHandler,
+	}, nil
 }
 
 func newLinkedInProvider(client *http.Client, cfg config.Config) (*jobproviders.LinkedIn, error) {
 	return jobproviders.NewLinkedIn(client, jobproviders.LinkedInConfig{
-		Pages: cfg.LinkedInPages, MaxDetails: cfg.LinkedInMaxDetails, MaxQueries: cfg.JobAlertMaxQueries,
-		Distance: cfg.LinkedInDistance, PostedWithin: time.Duration(cfg.LinkedInPostedWithinHours) * time.Hour,
-		MinInterval: 500 * time.Millisecond, JobTypes: cfg.LinkedInJobTypes, CompanyIDs: cfg.LinkedInCompanyIDs,
+		Pages:        cfg.LinkedInPages,
+		MaxDetails:   cfg.LinkedInMaxDetails,
+		MaxQueries:   cfg.JobAlertMaxQueries,
+		Distance:     cfg.LinkedInDistance,
+		PostedWithin: time.Duration(cfg.LinkedInPostedWithinHours) * time.Hour,
+		MinInterval:  500 * time.Millisecond,
+		JobTypes:     cfg.LinkedInJobTypes,
+		CompanyIDs:   cfg.LinkedInCompanyIDs,
 	})
 }
 
 func interactiveJobDeliveries(telegram jobapp.Messenger) []jobapp.Delivery {
-	return []jobapp.Delivery{{Name: "telegram", Messenger: telegram}}
+	return []jobapp.Delivery{
+		{
+			Name:      "telegram",
+			Messenger: telegram,
+		},
+	}
 }
 
 func newFiber() *fiber.App {
-	return fiber.New(fiber.Config{BodyLimit: 8 << 20, DisableStartupMessage: true})
+	return fiber.New(fiber.Config{
+		BodyLimit:             8 << 20,
+		DisableStartupMessage: true,
+	})
 }
+
 func (c *Container) Close() error {
 	var closeErrors []error
 	if c.jobSearchHandler != nil {

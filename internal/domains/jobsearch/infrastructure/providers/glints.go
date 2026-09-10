@@ -37,11 +37,22 @@ func NewGlints(client *http.Client, baseURL string, minInterval time.Duration) *
 	if minInterval < 0 {
 		minInterval = 0
 	}
-	return &Glints{client: client, baseURL: baseURL, minInterval: minInterval}
+
+	return &Glints{
+		client:      client,
+		baseURL:     baseURL,
+		minInterval: minInterval,
+	}
 }
 
-func (*Glints) Source() string        { return "glints" }
-func (*Glints) SupportsQueries() bool { return false }
+func (*Glints) Source() string {
+	return "glints"
+}
+
+func (*Glints) SupportsQueries() bool {
+	return false
+}
+
 func (g *Glints) HealthCheck(ctx context.Context) error {
 	_, err := g.Search(ctx, domain.SearchQuery{})
 	return err
@@ -146,7 +157,18 @@ func parseGlintsJSONLD(body []byte, baseURL string) []domain.RawJob {
 			if !strings.EqualFold(posting.Type, "JobPosting") || strings.TrimSpace(posting.Title) == "" {
 				continue
 			}
-			jobs = append(jobs, domain.RawJob{Source: "glints", ExternalID: posting.Identifier.Value, URL: absoluteURL(baseURL, posting.URL), Title: posting.Title, Company: posting.HiringOrganization.Name, Description: posting.Description, Location: posting.JobLocation.Address.AddressLocality, SalaryText: salaryText(posting.BaseSalary.Value.MinValue, posting.BaseSalary.Value.MaxValue), EmploymentType: posting.EmploymentType, FetchedAt: time.Now().UTC()})
+			jobs = append(jobs, domain.RawJob{
+				Source:         "glints",
+				ExternalID:     posting.Identifier.Value,
+				URL:            absoluteURL(baseURL, posting.URL),
+				Title:          posting.Title,
+				Company:        posting.HiringOrganization.Name,
+				Description:    posting.Description,
+				Location:       posting.JobLocation.Address.AddressLocality,
+				SalaryText:     salaryText(posting.BaseSalary.Value.MinValue, posting.BaseSalary.Value.MaxValue),
+				EmploymentType: posting.EmploymentType,
+				FetchedAt:      time.Now().UTC(),
+			})
 		}
 	}
 	return jobs
@@ -163,7 +185,13 @@ func parseGlintsLinks(body []byte, baseURL string) []domain.RawJob {
 		seen[id] = true
 		title := strings.TrimSpace(html.UnescapeString(htmlTag.ReplaceAllString(string(match[3]), " ")))
 		if title != "" {
-			jobs = append(jobs, domain.RawJob{Source: "glints", ExternalID: id, URL: absoluteURL(baseURL, string(match[1])), Title: strings.Join(strings.Fields(title), " "), FetchedAt: time.Now().UTC()})
+			jobs = append(jobs, domain.RawJob{
+				Source:     "glints",
+				ExternalID: id,
+				URL:        absoluteURL(baseURL, string(match[1])),
+				Title:      strings.Join(strings.Fields(title), " "),
+				FetchedAt:  time.Now().UTC(),
+			})
 		}
 	}
 	return jobs

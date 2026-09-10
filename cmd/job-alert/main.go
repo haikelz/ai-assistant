@@ -33,18 +33,58 @@ func main() {
 
 	cfg := config.Load()
 	client := &http.Client{Timeout: 120 * time.Second}
-	assessor := infrastructure.NewAIAssessor(client, infrastructure.Config{Provider: cfg.AIProvider, Model: cfg.AIModel, SumopodAPIKey: cfg.SumopodAPIKey, OpenAIAPIKey: cfg.OpenAIAPIKey, GoogleAPIKey: cfg.GoogleAPIKey, SumopodURL: cfg.SumopodResponsesURL, OpenAIURL: cfg.OpenAIResponsesURL, GoogleURL: cfg.GoogleGenerativeURL})
+	assessor := infrastructure.NewAIAssessor(client, infrastructure.AIProviderConfig{
+		Provider:      cfg.AIProvider,
+		Model:         cfg.AIModel,
+		SumopodAPIKey: cfg.SumopodAPIKey,
+		OpenAIAPIKey:  cfg.OpenAIAPIKey,
+		GoogleAPIKey:  cfg.GoogleAPIKey,
+		SumopodURL:    cfg.SumopodResponsesURL,
+		OpenAIURL:     cfg.OpenAIResponsesURL,
+		GoogleURL:     cfg.GoogleGenerativeURL,
+	})
 	telegram := infrastructure.NewTelegram(client, cfg.TelegramBotToken, cfg.TelegramUserID, "")
-	deliveries := []application.Delivery{{Name: "telegram", Messenger: telegram}}
+	deliveries := []application.Delivery{
+		{
+			Name:      "telegram",
+			Messenger: telegram,
+		},
+	}
+
 	if *scheduled && cfg.WhatsAppRecipient != "" {
-		deliveries = append(deliveries, application.Delivery{Name: "whatsapp", Messenger: infrastructure.NewLocalWhatsApp(client, cfg.WhatsAppGatewayURL)})
+		deliveries = append(deliveries, application.Delivery{
+			Name:      "whatsapp",
+			Messenger: infrastructure.NewLocalWhatsApp(client, cfg.WhatsAppGatewayURL),
+		})
 	}
+
 	if *scheduled && cfg.MailTo != "" {
-		email := infrastructure.NewEmail(infrastructure.EmailConfig{Mailer: cfg.MailMailer, Username: cfg.MailUsername, Password: cfg.MailPassword, Host: cfg.MailHost, Port: cfg.MailPort, Encryption: cfg.MailEncryption, From: cfg.MailFrom, To: cfg.MailTo})
-		deliveries = append(deliveries, application.Delivery{Name: "email", Messenger: email})
+		email := infrastructure.NewEmail(infrastructure.EmailConfig{
+			Mailer:     cfg.MailMailer,
+			Username:   cfg.MailUsername,
+			Password:   cfg.MailPassword,
+			Host:       cfg.MailHost,
+			Port:       cfg.MailPort,
+			Encryption: cfg.MailEncryption,
+			From:       cfg.MailFrom,
+			To:         cfg.MailTo,
+		})
+		deliveries = append(deliveries, application.Delivery{
+			Name:      "email",
+			Messenger: email,
+		})
 	}
+
 	messenger := application.NewMultiMessenger(deliveries, log.Default())
-	criteria := domain.Criteria{Positions: split(*keywords), Skills: split(*skills), Locations: split(*location), MaxYears: domain.ParseMaxYears(*experience), Halal: *halal, Interactive: strings.TrimSpace(*keywords) != ""}
+	criteria := domain.Criteria{
+		Positions:   split(*keywords),
+		Skills:      split(*skills),
+		Locations:   split(*location),
+		MaxYears:    domain.ParseMaxYears(*experience),
+		Halal:       *halal,
+		Interactive: strings.TrimSpace(*keywords) != "",
+	}
+
 	if *scheduled {
 		settings := application.NewSettingsService(infrastructure.NewJSONAlertConfigStore(cfg.JobAlertConfigPath))
 		var err error
@@ -54,6 +94,7 @@ func main() {
 		}
 		fmt.Fprintf(os.Stderr, "job-alert: scheduled criteria positions=%q skills=%q locations=%q max_years=%d halal=%t\n", criteria.Positions, criteria.Skills, criteria.Locations, criteria.MaxYears, criteria.Halal)
 	}
+
 	if *scheduled && cfg.JobAlertPipelineEnabled {
 		if err := runCurated(context.Background(), cfg, client, assessor, messenger, criteria, *dryRun); err != nil {
 			log.Fatal(err)
@@ -61,15 +102,19 @@ func main() {
 		return
 	}
 
-	sources := []application.Source{loggingSource{infrastructure.NewKitalulus(client, "")}, loggingSource{infrastructure.NewDealls(client, "")}}
+	sources := []application.Source{
+		loggingSource{Source: infrastructure.NewKitalulus(client, "")},
+		loggingSource{Source: infrastructure.NewDealls(client, "")},
+	}
+
 	if cfg.LinkedInEnabled {
 		linkedIn, err := newLinkedInProvider(client, cfg)
 		if err != nil {
 			log.Fatalf("job-alert: configure LinkedIn: %v", err)
 		}
-		sources = append(sources, loggingSource{linkedIn})
+		sources = append(sources, loggingSource{Source: linkedIn})
 	}
-	service := application.NewService(sources, assessor, messenger, log.Default())
+	service := application.NewJobSearchService(sources, assessor, messenger, log.Default())
 	fmt.Fprintln(os.Stderr, "job-alert: fetching")
 	result, err := service.Search(context.Background(), criteria)
 	if err != nil {
@@ -90,7 +135,15 @@ func main() {
 	}
 }
 
-func runCurated(ctx context.Context, cfg config.Config, client *http.Client, assessor *infrastructure.AIAssessor, messenger application.Messenger, criteria domain.Criteria, dryRun bool) error {
+func runCurated(
+	ctx context.Context,
+	cfg config.Config,
+	client *http.Client,
+	assessor *infrastructure.AIAssessor,
+	messenger application.Messenger,
+	criteria domain.Criteria,
+	dryRun bool,
+) error {
 	if err := os.MkdirAll(filepath.Dir(cfg.JobAlertDBPath), 0o700); err != nil {
 		return fmt.Errorf("create job-alert database directory: %w", err)
 	}
@@ -105,7 +158,11 @@ func runCurated(ctx context.Context, cfg config.Config, client *http.Client, ass
 		return err
 	}
 
-	jobProviders := []application.JobProvider{providers.NewKitalulus(client, ""), providers.NewDealls(client, "")}
+	jobProviders := []application.JobProvider{
+		providers.NewKitalulus(client, ""),
+		providers.NewDealls(client, ""),
+	}
+
 	if cfg.GlintsEnabled {
 		jobProviders = append(jobProviders, providers.NewGlints(client, "", 2*time.Second))
 	}
@@ -123,9 +180,23 @@ func runCurated(ctx context.Context, cfg config.Config, client *http.Client, ass
 	if cfg.LinkedInEnabled {
 		providerTimeout = 45 * time.Second
 	}
-	ingestion := application.NewIngestionPipeline(application.NewSearchPlanner(cfg.JobAlertMaxQueries), jobProviders, store, providerTimeout, 4, log.Default())
+	ingestion := application.NewIngestionPipeline(
+		application.NewSearchPlanner(cfg.JobAlertMaxQueries),
+		jobProviders,
+		store,
+		providerTimeout,
+		4,
+		log.Default(),
+	)
 	classifier := infrastructure.NewBatchClassifier(assessor, cfg.JobAlertBatchSize)
-	service := application.NewCuratedService(ingestion, classifier, application.NewMatchEngine(cfg.JobAlertMinMatchScore), store, messenger, log.Default())
+	service := application.NewCuratedService(
+		ingestion,
+		classifier,
+		application.NewMatchEngine(cfg.JobAlertMinMatchScore),
+		store,
+		messenger,
+		log.Default(),
+	)
 
 	fmt.Fprintf(os.Stderr, "job-alert: curated pipeline fetching providers=%d glints=%t linkedin=%t dry_run=%t\n", len(jobProviders), cfg.GlintsEnabled, cfg.LinkedInEnabled, dryRun)
 	message, run, err := service.Run(ctx, criteria, !dryRun, !dryRun)
@@ -138,9 +209,14 @@ func runCurated(ctx context.Context, cfg config.Config, client *http.Client, ass
 
 func newLinkedInProvider(client *http.Client, cfg config.Config) (*providers.LinkedIn, error) {
 	return providers.NewLinkedIn(client, providers.LinkedInConfig{
-		Pages: cfg.LinkedInPages, MaxDetails: cfg.LinkedInMaxDetails, MaxQueries: cfg.JobAlertMaxQueries,
-		Distance: cfg.LinkedInDistance, PostedWithin: time.Duration(cfg.LinkedInPostedWithinHours) * time.Hour,
-		MinInterval: 500 * time.Millisecond, JobTypes: cfg.LinkedInJobTypes, CompanyIDs: cfg.LinkedInCompanyIDs,
+		Pages:        cfg.LinkedInPages,
+		MaxDetails:   cfg.LinkedInMaxDetails,
+		MaxQueries:   cfg.JobAlertMaxQueries,
+		Distance:     cfg.LinkedInDistance,
+		PostedWithin: time.Duration(cfg.LinkedInPostedWithinHours) * time.Hour,
+		MinInterval:  500 * time.Millisecond,
+		JobTypes:     cfg.LinkedInJobTypes,
+		CompanyIDs:   cfg.LinkedInCompanyIDs,
 	})
 }
 
@@ -154,7 +230,9 @@ func split(value string) []string {
 	return values
 }
 
-type loggingSource struct{ application.Source }
+type loggingSource struct {
+	application.Source
+}
 
 func (s loggingSource) Fetch(ctx context.Context, criteria domain.Criteria) ([]domain.Job, error) {
 	jobs, err := s.Source.Fetch(ctx, criteria)

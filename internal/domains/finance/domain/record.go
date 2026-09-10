@@ -50,8 +50,14 @@ func (i *RecordInput) Validate() error {
 	if i.Phone == "" || i.Type == "" || i.Category == "" || i.Description == "" || i.Amount <= 0 {
 		return fmt.Errorf("%w: phone, type, positive amount, category, and description are required", ErrInvalidRecord)
 	}
-	valid := (i.Type == "expense" && (i.Category == "Investasi" || i.Category == "Sumbangan" || i.Category == "Makan/Minum" || i.Category == "Lain - Lain")) ||
-		(i.Type == "income" && i.Category == "Pendapatan") || (i.Type == "modal" && i.Category == "Modal")
+	valid :=
+		(i.Type == "expense" &&
+			(i.Category == "Investasi" ||
+				i.Category == "Sumbangan" ||
+				i.Category == "Makan/Minum" ||
+				i.Category == "Lain - Lain")) ||
+			(i.Type == "income" && i.Category == "Pendapatan") ||
+			(i.Type == "modal" && i.Category == "Modal")
 	if !valid {
 		return fmt.Errorf("%w: invalid type or category", ErrInvalidRecord)
 	}

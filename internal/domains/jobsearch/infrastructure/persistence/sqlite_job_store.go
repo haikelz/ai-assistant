@@ -11,9 +11,15 @@ import (
 	"ai-assistant/internal/domains/jobsearch/domain"
 )
 
-type SQLiteJobStore struct{ db *sql.DB }
+type SQLiteJobStore struct {
+	db *sql.DB
+}
 
-func NewSQLiteJobStore(db *sql.DB) *SQLiteJobStore { return &SQLiteJobStore{db: db} }
+func NewSQLiteJobStore(db *sql.DB) *SQLiteJobStore {
+	return &SQLiteJobStore{
+		db: db,
+	}
+}
 
 func (s *SQLiteJobStore) Initialize(ctx context.Context) error {
 	statements := []string{
@@ -47,33 +53,90 @@ func (s *SQLiteJobStore) Initialize(ctx context.Context) error {
 func (s *SQLiteJobStore) Upsert(ctx context.Context, job domain.NormalizedJob) (domain.UpsertOutcome, error) {
 	var existingHash string
 	var firstSeen time.Time
-	lookupErr := s.db.QueryRowContext(ctx, `SELECT content_hash, first_seen_at FROM jobs WHERE source = ? AND external_id = ?`, job.Source, job.ExternalID).Scan(&existingHash, &firstSeen)
+	lookupErr := s.db.QueryRowContext(
+		ctx,
+		`SELECT content_hash, first_seen_at FROM jobs WHERE source = ? AND external_id = ?`,
+		job.Source,
+		job.ExternalID,
+	).Scan(&existingHash, &firstSeen)
 	if lookupErr != nil && !errors.Is(lookupErr, sql.ErrNoRows) {
 		return "", fmt.Errorf("lookup job: %w", lookupErr)
 	}
+
 	skills, err := json.Marshal(job.Skills)
 	if err != nil {
 		return "", fmt.Errorf("encode job skills: %w", err)
 	}
 	if errors.Is(lookupErr, sql.ErrNoRows) {
-		_, err = s.db.ExecContext(ctx, `INSERT INTO jobs
+		_, err = s.db.ExecContext(
+			ctx,
+			`INSERT INTO jobs
             (id, source, external_id, canonical_url, title, normalized_title, company, description, city, work_mode, salary_min, salary_max, salary_currency, min_years_exp, max_years_exp, skills, employment_type, content_hash, source_published_at, first_seen_at, last_seen_at)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-			job.ID, job.Source, job.ExternalID, job.CanonicalURL, job.Title, job.NormalizedTitle, job.Company, job.Description, job.City, job.WorkMode, job.SalaryMin, job.SalaryMax, job.SalaryCurrency, job.MinYearsExp, job.MaxYearsExp, skills, job.EmploymentType, job.ContentHash, job.SourcePublishedAt, job.FirstSeenAt, job.LastSeenAt)
+			job.ID,
+			job.Source,
+			job.ExternalID,
+			job.CanonicalURL,
+			job.Title,
+			job.NormalizedTitle,
+			job.Company,
+			job.Description,
+			job.City,
+			job.WorkMode,
+			job.SalaryMin,
+			job.SalaryMax,
+			job.SalaryCurrency,
+			job.MinYearsExp,
+			job.MaxYearsExp,
+			skills,
+			job.EmploymentType,
+			job.ContentHash,
+			job.SourcePublishedAt,
+			job.FirstSeenAt,
+			job.LastSeenAt,
+		)
 		if err != nil {
 			return "", fmt.Errorf("insert job: %w", err)
 		}
 		return domain.UpsertNew, nil
 	}
 	if existingHash == job.ContentHash {
-		_, err = s.db.ExecContext(ctx, `UPDATE jobs SET last_seen_at = ? WHERE source = ? AND external_id = ?`, job.LastSeenAt, job.Source, job.ExternalID)
+		_, err = s.db.ExecContext(
+			ctx,
+			`UPDATE jobs SET last_seen_at = ? WHERE source = ? AND external_id = ?`,
+			job.LastSeenAt,
+			job.Source,
+			job.ExternalID,
+		)
 		if err != nil {
 			return "", fmt.Errorf("touch job: %w", err)
 		}
 		return domain.UpsertUnchanged, nil
 	}
-	_, err = s.db.ExecContext(ctx, `UPDATE jobs SET canonical_url=?, title=?, normalized_title=?, company=?, description=?, city=?, work_mode=?, salary_min=?, salary_max=?, salary_currency=?, min_years_exp=?, max_years_exp=?, skills=?, employment_type=?, content_hash=?, source_published_at=?, first_seen_at=?, last_seen_at=? WHERE source=? AND external_id=?`,
-		job.CanonicalURL, job.Title, job.NormalizedTitle, job.Company, job.Description, job.City, job.WorkMode, job.SalaryMin, job.SalaryMax, job.SalaryCurrency, job.MinYearsExp, job.MaxYearsExp, skills, job.EmploymentType, job.ContentHash, job.SourcePublishedAt, firstSeen, job.LastSeenAt, job.Source, job.ExternalID)
+	_, err = s.db.ExecContext(
+		ctx,
+		`UPDATE jobs SET canonical_url=?, title=?, normalized_title=?, company=?, description=?, city=?, work_mode=?, salary_min=?, salary_max=?, salary_currency=?, min_years_exp=?, max_years_exp=?, skills=?, employment_type=?, content_hash=?, source_published_at=?, first_seen_at=?, last_seen_at=? WHERE source=? AND external_id=?`,
+		job.CanonicalURL,
+		job.Title,
+		job.NormalizedTitle,
+		job.Company,
+		job.Description,
+		job.City,
+		job.WorkMode,
+		job.SalaryMin,
+		job.SalaryMax,
+		job.SalaryCurrency,
+		job.MinYearsExp,
+		job.MaxYearsExp,
+		skills,
+		job.EmploymentType,
+		job.ContentHash,
+		job.SourcePublishedAt,
+		firstSeen,
+		job.LastSeenAt,
+		job.Source,
+		job.ExternalID,
+	)
 	if err != nil {
 		return "", fmt.Errorf("update job: %w", err)
 	}
