@@ -47,26 +47,31 @@ spec:
                 secretKeyRef:
                   name: ai-assistant-env
                   key: AI_PROVIDER
+                  optional: true
             - name: AI_MODEL
               valueFrom:
                 secretKeyRef:
                   name: ai-assistant-env
                   key: AI_MODEL
+                  optional: true
             - name: SUMOPOD_API_KEY
               valueFrom:
                 secretKeyRef:
                   name: ai-assistant-env
                   key: SUMOPOD_API_KEY
+                  optional: true
             - name: GOOGLE_API_KEY
               valueFrom:
                 secretKeyRef:
                   name: ai-assistant-env
                   key: GOOGLE_API_KEY
+                  optional: true
             - name: OPENAI_API_KEY
               valueFrom:
                 secretKeyRef:
                   name: ai-assistant-env
                   key: OPENAI_API_KEY
+                  optional: true
             - name: TELEGRAM_BOT_TOKEN
               valueFrom:
                 secretKeyRef:
@@ -112,26 +117,31 @@ spec:
                 secretKeyRef:
                   name: ai-assistant-env
                   key: AI_PROVIDER
+                  optional: true
             - name: AI_MODEL
               valueFrom:
                 secretKeyRef:
                   name: ai-assistant-env
                   key: AI_MODEL
+                  optional: true
             - name: SUMOPOD_API_KEY
               valueFrom:
                 secretKeyRef:
                   name: ai-assistant-env
                   key: SUMOPOD_API_KEY
+                  optional: true
             - name: GOOGLE_API_KEY
               valueFrom:
                 secretKeyRef:
                   name: ai-assistant-env
                   key: GOOGLE_API_KEY
+                  optional: true
             - name: OPENAI_API_KEY
               valueFrom:
                 secretKeyRef:
                   name: ai-assistant-env
                   key: OPENAI_API_KEY
+                  optional: true
             - name: TELEGRAM_BOT_TOKEN
               valueFrom:
                 secretKeyRef:
@@ -147,156 +157,187 @@ spec:
                 secretKeyRef:
                   name: ai-assistant-env
                   key: WHATSAPP_RECIPIENT
+                  optional: true
             - name: JOB_ALERT_PIPELINE_ENABLED
               valueFrom:
                 secretKeyRef:
                   name: ai-assistant-env
                   key: JOB_ALERT_PIPELINE_ENABLED
+                  optional: true
             - name: GLINTS_ENABLED
               valueFrom:
                 secretKeyRef:
                   name: ai-assistant-env
                   key: GLINTS_ENABLED
+                  optional: true
             - name: LINKEDIN_ENABLED
               valueFrom:
                 secretKeyRef:
                   name: ai-assistant-env
                   key: LINKEDIN_ENABLED
+                  optional: true
             - name: LINKEDIN_PAGES
               valueFrom:
                 secretKeyRef:
                   name: ai-assistant-env
                   key: LINKEDIN_PAGES
+                  optional: true
             - name: LINKEDIN_MAX_DETAILS
               valueFrom:
                 secretKeyRef:
                   name: ai-assistant-env
                   key: LINKEDIN_MAX_DETAILS
+                  optional: true
             - name: LINKEDIN_POSTED_WITHIN_HOURS
               valueFrom:
                 secretKeyRef:
                   name: ai-assistant-env
                   key: LINKEDIN_POSTED_WITHIN_HOURS
+                  optional: true
             - name: LINKEDIN_DISTANCE
               valueFrom:
                 secretKeyRef:
                   name: ai-assistant-env
                   key: LINKEDIN_DISTANCE
+                  optional: true
             - name: LINKEDIN_JOB_TYPES
               valueFrom:
                 secretKeyRef:
                   name: ai-assistant-env
                   key: LINKEDIN_JOB_TYPES
+                  optional: true
             - name: LINKEDIN_COMPANY_IDS
               valueFrom:
                 secretKeyRef:
                   name: ai-assistant-env
                   key: LINKEDIN_COMPANY_IDS
+                  optional: true
             - name: JOB_ALERT_DB_PATH
               valueFrom:
                 secretKeyRef:
                   name: ai-assistant-env
                   key: JOB_ALERT_DB_PATH
+                  optional: true
             - name: JOB_ALERT_MAX_QUERIES
               valueFrom:
                 secretKeyRef:
                   name: ai-assistant-env
                   key: JOB_ALERT_MAX_QUERIES
+                  optional: true
             - name: JOB_ALERT_AI_BATCH_SIZE
               valueFrom:
                 secretKeyRef:
                   name: ai-assistant-env
                   key: JOB_ALERT_AI_BATCH_SIZE
+                  optional: true
             - name: JOB_ALERT_MIN_MATCH_SCORE
               valueFrom:
                 secretKeyRef:
                   name: ai-assistant-env
                   key: JOB_ALERT_MIN_MATCH_SCORE
+                  optional: true
             - name: MAIL_MAILER
               valueFrom:
                 secretKeyRef:
                   name: ai-assistant-env
                   key: MAIL_MAILER
+                  optional: true
             - name: MAIL_USERNAME
               valueFrom:
                 secretKeyRef:
                   name: ai-assistant-env
                   key: MAIL_USERNAME
+                  optional: true
             - name: MAIL_PASSWORD
               valueFrom:
                 secretKeyRef:
                   name: ai-assistant-env
                   key: MAIL_PASSWORD
+                  optional: true
             - name: MAIL_HOST
               valueFrom:
                 secretKeyRef:
                   name: ai-assistant-env
                   key: MAIL_HOST
+                  optional: true
             - name: MAIL_PORT
               valueFrom:
                 secretKeyRef:
                   name: ai-assistant-env
                   key: MAIL_PORT
+                  optional: true
             - name: MAIL_ENCRYPTION
               valueFrom:
                 secretKeyRef:
                   name: ai-assistant-env
                   key: MAIL_ENCRYPTION
+                  optional: true
             - name: MAIL_FROM
               valueFrom:
                 secretKeyRef:
                   name: ai-assistant-env
                   key: MAIL_FROM
+                  optional: true
             - name: MAIL_TO
               valueFrom:
                 secretKeyRef:
                   name: ai-assistant-env
                   key: MAIL_TO
+                  optional: true
             - name: STARCO_USERNAME
               valueFrom:
                 secretKeyRef:
                   name: ai-assistant-env
                   key: STARCO_USERNAME
+                  optional: true
             - name: STARCO_URL
               valueFrom:
                 secretKeyRef:
                   name: ai-assistant-env
                   key: STARCO_URL
+                  optional: true
             - name: STARCO_PASSWORD
               valueFrom:
                 secretKeyRef:
                   name: ai-assistant-env
                   key: STARCO_PASSWORD
+                  optional: true
             - name: STARCO_ATTENDANCE_URL
               valueFrom:
                 secretKeyRef:
                   name: ai-assistant-env
                   key: STARCO_ATTENDANCE_URL
+                  optional: true
             - name: STARCO_CLOCK_IN_SELECTOR
               valueFrom:
                 secretKeyRef:
                   name: ai-assistant-env
                   key: STARCO_CLOCK_IN_SELECTOR
+                  optional: true
             - name: STARCO_CLOCK_OUT_SELECTOR
               valueFrom:
                 secretKeyRef:
                   name: ai-assistant-env
                   key: STARCO_CLOCK_OUT_SELECTOR
+                  optional: true
             - name: STARCO_GEO_LATITUDE
               valueFrom:
                 secretKeyRef:
                   name: ai-assistant-env
                   key: STARCO_GEO_LATITUDE
+                  optional: true
             - name: STARCO_GEO_LONGITUDE
               valueFrom:
                 secretKeyRef:
                   name: ai-assistant-env
                   key: STARCO_GEO_LONGITUDE
+                  optional: true
             - name: STARCO_TIMEOUT_SECONDS
               valueFrom:
                 secretKeyRef:
                   name: ai-assistant-env
                   key: STARCO_TIMEOUT_SECONDS
+                  optional: true
           ports:
             - name: http
               containerPort: 18790
