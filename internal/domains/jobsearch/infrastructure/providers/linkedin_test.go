@@ -77,6 +77,34 @@ func TestLinkedInSearchAppliesFiltersAndEnrichesPublicJobs(t *testing.T) {
 	}
 }
 
+func TestLinkedInSearchDefaultsLocationToIndonesia(t *testing.T) {
+	var location string
+
+	server := httptest.NewServer(http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {
+		location = request.URL.Query().Get("location")
+		writeTestResponse(t, response, "")
+	}))
+	defer server.Close()
+
+	provider, err := NewLinkedIn(server.Client(), LinkedInConfig{
+		SearchURL: server.URL,
+		DetailURL: server.URL + "/detail",
+		Pages:     1,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	_, err = provider.Search(t.Context(), domain.SearchQuery{Keyword: "Engineer"})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if location != "Indonesia" {
+		t.Fatalf("location=%q", location)
+	}
+}
+
 func TestLinkedInReturnsPartialJobsAndStopsAfterAccessControl(t *testing.T) {
 	var requests atomic.Int32
 	server := httptest.NewServer(http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {

@@ -15,9 +15,10 @@ import (
 )
 
 const (
-	linkedInSearchURL = "https://www.linkedin.com/jobs-guest/jobs/api/seeMoreJobPostings/search"
-	linkedInDetailURL = "https://www.linkedin.com/jobs-guest/jobs/api/jobPosting/"
-	linkedInUserAgent = "ai-assistant-job-alert/1.0 (personal use; public jobs only)"
+	linkedInSearchURL       = "https://www.linkedin.com/jobs-guest/jobs/api/seeMoreJobPostings/search"
+	linkedInDetailURL       = "https://www.linkedin.com/jobs-guest/jobs/api/jobPosting/"
+	linkedInDefaultLocation = "Indonesia"
+	linkedInUserAgent       = "ai-assistant-job-alert/1.0 (personal use; public jobs only)"
 )
 
 type LinkedInConfig struct {
@@ -187,9 +188,11 @@ func (l *LinkedIn) buildSearchURL(query domain.SearchQuery, start int) (string, 
 	}
 	values := parsed.Query()
 	values.Set("keywords", strings.TrimSpace(query.Keyword))
-	if location := strings.TrimSpace(query.Location); location != "" {
-		values.Set("location", location)
+	location := strings.TrimSpace(query.Location)
+	if location == "" {
+		location = linkedInDefaultLocation
 	}
+	values.Set("location", location)
 	values.Set("distance", strconv.Itoa(l.config.Distance))
 	values.Set("f_TPR", "r"+strconv.FormatInt(int64(l.config.PostedWithin/time.Second), 10))
 	values.Set("sortBy", "DD")
