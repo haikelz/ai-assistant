@@ -105,6 +105,37 @@ func TestLinkedInSearchDefaultsLocationToIndonesia(t *testing.T) {
 	}
 }
 
+func TestLinkedInSearchExcludesNonIndonesianJobs(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(response http.ResponseWriter, _ *http.Request) {
+		foreignJob := strings.Replace(
+			linkedInSearchFixture("456"),
+			"Jakarta, Indonesia",
+			"Singapore",
+			1,
+		)
+		writeTestResponse(t, response, linkedInSearchFixture("123")+foreignJob)
+	}))
+	defer server.Close()
+
+	provider, err := NewLinkedIn(server.Client(), LinkedInConfig{
+		SearchURL: server.URL,
+		DetailURL: server.URL + "/detail",
+		Pages:     1,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	jobs, err := provider.Search(t.Context(), domain.SearchQuery{Keyword: "Engineer"})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if len(jobs) != 1 || jobs[0].ExternalID != "123" {
+		t.Fatalf("jobs=%#v", jobs)
+	}
+}
+
 func TestLinkedInReturnsPartialJobsAndStopsAfterAccessControl(t *testing.T) {
 	var requests atomic.Int32
 	server := httptest.NewServer(http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {

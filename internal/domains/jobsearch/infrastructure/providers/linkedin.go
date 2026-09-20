@@ -158,6 +158,9 @@ func (l *LinkedIn) Search(ctx context.Context, query domain.SearchQuery) ([]doma
 			break
 		}
 		for _, job := range pageJobs {
+			if !strings.Contains(strings.ToLower(job.Location), "indonesia") {
+				continue
+			}
 			if !seen[job.ExternalID] {
 				seen[job.ExternalID] = true
 				jobs = append(jobs, job)
